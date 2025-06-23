@@ -1,0 +1,11 @@
+code/
+notes/
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+
+# --- Standard Python Ignores ---
+# Ignore Python bytecode files
+__pycache__/
+*.pyc
