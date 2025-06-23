@@ -243,55 +243,88 @@ def build_participant_segment_data(df):
     return dict(participant_data) 
 
 def prepare_analysis_data(df):
-    """Prepares aggregated data for analysis charts."""
+    """
+    Prepares aggregated data for analysis charts.
+    Counts are based on *unique participants* per category or code, not on the total number of segments.
+    All chart data is sorted by count in descending order.
+    """
     if df is None or df.empty: return {}
     analysis_data = {}
     try: # Wrap analysis preparation in try-except
+        # The dropdown list of categories remains alphabetically sorted for user convenience.
         all_categories = sorted(df[CAT_COL].unique().tolist())
         analysis_data['allCategories'] = all_categories
 
-        # 1. Category distribution
-        cat_counts = df[CAT_COL].value_counts()
-        analysis_data['categoryDistribution'] = {'labels': cat_counts.index.astype(str).tolist(), 'data': cat_counts.values.tolist(), 'title': 'Overall Category Distribution (Click bar to see codes)'} if not cat_counts.empty else None
+        # 1. Category distribution based on unique participants, sorted by count.
+        cat_counts = df.groupby(CAT_COL)[PARTICIPANT_COL].nunique().sort_values(ascending=False)
+        analysis_data['categoryDistribution'] = {
+            'labels': cat_counts.index.astype(str).tolist(),
+            'data': cat_counts.values.tolist(),
+            'title': 'Category Distribution (by Unique Participant)'
+        } if not cat_counts.empty else None
 
-        # 2. Data for dynamic code breakdown chart
+        # 2. Data for dynamic code breakdown chart, based on unique participants.
         analysis_data['allCategoryCodeCounts'] = {}
         if all_categories:
             for cat_name in all_categories:
-                code_counts = df[df[CAT_COL] == cat_name][CODE_COL].value_counts()
-                if not code_counts.empty: analysis_data['allCategoryCodeCounts'][cat_name] = {'labels': code_counts.index.astype(str).tolist(), 'data': code_counts.values.tolist()}
+                df_cat_filtered = df[df[CAT_COL] == cat_name]
+                code_counts = df_cat_filtered.groupby(CODE_COL)[PARTICIPANT_COL].nunique().sort_values(ascending=False)
+
+                if not code_counts.empty:
+                    analysis_data['allCategoryCodeCounts'][cat_name] = {
+                        'labels': code_counts.index.astype(str).tolist(),
+                        'data': code_counts.values.tolist()
+                    }
+
             default_cat = config.DEFAULT_CATEGORY_FOR_DYNAMIC_CHART if config.DEFAULT_CATEGORY_FOR_DYNAMIC_CHART in all_categories else (all_categories[0] if all_categories else None)
             analysis_data['defaultCategoryForBreakdown'] = next((c for c in [default_cat] + all_categories if c and c in analysis_data['allCategoryCodeCounts']), None)
-        else: analysis_data['defaultCategoryForBreakdown'] = None
-            
-        # Helper to get chart data
+        else:
+            analysis_data['defaultCategoryForBreakdown'] = None
+
+        # Helper to get chart data for specific, pre-defined charts.
         def get_chart_data_for_category(pattern, title_prefix):
             match = next((c for c in all_categories if c.lower() == pattern.lower()), None) or \
                     next((c for c in all_categories if pattern.lower() in c.lower()), None)
+
             if match and match in analysis_data['allCategoryCodeCounts']:
                 chart_data = analysis_data['allCategoryCodeCounts'][match]
-                return {'categoryName': match, 'labels': chart_data['labels'], 'data': chart_data['data'], 'title': f'{title_prefix} ("{match}")'}
+                # Title updated to reflect the counting method.
+                return {
+                    'categoryName': match,
+                    'labels': chart_data['labels'],
+                    'data': chart_data['data'],
+                    'title': f'{title_prefix} (by Unique Participant)'
+                }
+
             print(f"Info: Category for '{title_prefix}' (pattern '{pattern}') not found or has no codes.")
             return None
-                
+
         # 3. Category 1 Distribution
         analysis_data['category1distribution'] = get_chart_data_for_category(config.CATEGORY_1_FOR_CHART, config.CATEGORY_1_FOR_CHART_TITLE)
+
         # 4. Category 2 Distribution
         analysis_data['category2distribution'] = get_chart_data_for_category(config.CATEGORY_2_FOR_CHART, config.CATEGORY_2_FOR_CHART_TITLE)
+
         # 5. Category 3 Distribution
         cat_3_data = get_chart_data_for_category(config.CATEGORY_3_FOR_CHART, config.CATEGORY_3_FOR_CHART_TITLE)
-        if not cat_3_data: cat_3_data = get_chart_data_for_category(config.CATEGORY_3_FOR_CHART_FALLBACK, config.CATEGORY_3_FOR_CHART_FALLBACK_TITLE) 
+        if not cat_3_data:
+            cat_3_data = get_chart_data_for_category(config.CATEGORY_3_FOR_CHART_FALLBACK, config.CATEGORY_3_FOR_CHART_FALLBACK_TITLE)
         analysis_data['category3distribution'] = cat_3_data
-        # 6. Participant activity (Will be clickable)
+
+        # 6. Participant activity
         participant_counts = df[PARTICIPANT_COL].value_counts()
-        analysis_data['participantActivity'] = {'labels': participant_counts.index.astype(str).tolist(), 'data': participant_counts.values.tolist(), 'title': 'Segments per Participant (Click bar)'} if not participant_counts.empty else None
+        analysis_data['participantActivity'] = {
+            'labels': participant_counts.index.astype(str).tolist(),
+            'data': participant_counts.values.tolist(),
+            'title': 'Segments per Participant (Click bar)'
+        } if not participant_counts.empty else None
+
     except Exception as e:
         print(f"Error preparing analysis data: {e}")
         traceback.print_exc()
         return {} # Return empty on error
-            
-    return analysis_data
 
+    return analysis_data
 # ==============================================================================
 # === HTML Generation Function ===
 # ==============================================================================
