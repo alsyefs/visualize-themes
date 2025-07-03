@@ -1,0 +1,13 @@
+code/
+notes/
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+secret.py
+irr_input/*
+!irr_input/.gitkeep
+# --- Standard Python Ignores ---
+# Ignore Python bytecode files
+__pycache__/
+*.pyc

@@ -1,0 +1,8 @@
+plotly
+pandas==2.2.2
+matplotlib
+statsmodels
+numpy==1.26.4
+krippendorff
+thefuzz
+sentence-transformers
