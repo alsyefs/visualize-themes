@@ -1,4 +1,3 @@
-import secret
 # ==============================================================================
 # 'calculate_irr.py' configuration
 # ==============================================================================
@@ -10,6 +9,7 @@ CODER_NAME_COLUMN = "Coder"
 # === Chart Configuration               ========================================
 # === EDIT THESE VALUES FOR THE PROJECT ========================================
 # ==============================================================================
+import secret
 CATEGORY_1_FOR_CHART = secret.CATEGORY_1_FOR_CHART
 CATEGORY_1_FOR_CHART_TITLE = secret.CATEGORY_1_FOR_CHART_TITLE
 CATEGORY_2_FOR_CHART = secret.CATEGORY_2_FOR_CHART
