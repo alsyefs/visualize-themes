@@ -356,7 +356,7 @@ def main():
     print("--- Inter-Rater Reliability Calculator ---")
     while True:
         print("\nHow would you like to proceed?")
-        print("1. Start fresh (process and merge all files from the 'input' directory)")
+        print("1. Start fresh (process and merge all files from the 'irr_input' directory)")
         print("2. Use existing file (re-calculate IRR from 'output/merged_codebook.csv')")
         workflow_choice = input("Please enter 1 or 2 (or 'q' to quit): ").strip()
 
