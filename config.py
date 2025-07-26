@@ -5,6 +5,10 @@ INPUT_DIRECTORY = "irr_input"
 TEXT_COLUMN = "Coded"
 CODE_COLUMN = "Codename"
 CODER_NAME_COLUMN = "Coder"
+
+OUTPUT_MERGEED_FILE = 'input/codebook.csv'
+OUTPUT_MERGED_IRR_DATA_FILE = 'merged_irr_data.csv'
+IRR_AGREEMENT_INPUT_FILE = "output/" + OUTPUT_MERGED_IRR_DATA_FILE
 # ==============================================================================
 # === Chart Configuration               ========================================
 # === EDIT THESE VALUES FOR THE PROJECT ========================================
@@ -20,13 +24,13 @@ CATEGORY_3_FOR_CHART_FALLBACK = secret.CATEGORY_3_FOR_CHART_FALLBACK
 CATEGORY_3_FOR_CHART_FALLBACK_TITLE = secret.CATEGORY_3_FOR_CHART_FALLBACK_TITLE
 DEFAULT_CATEGORY_FOR_DYNAMIC_CHART = secret.DEFAULT_CATEGORY_FOR_DYNAMIC_CHART
 
-CODEBOOK_A = 'input/'+secret.CODEBOOK_A
-CODEBOOK_B = 'input/'+secret.CODEBOOK_B
-OUTPUT_MERGEED_FILE = 'input/'+secret.OUTPUT_MERGEED_FILE
-
+# ==============================================================================
+# === Codebook Configuration            ========================================
 INPUT_CODE_TEXT_A = "input/"+secret.INPUT_CODE_TEXT_A
 INPUT_CODE_TEXT_B = "input/"+secret.INPUT_CODE_TEXT_B
 
+CODEBOOK_A = 'input/'+secret.CODEBOOK_A
+CODEBOOK_B = 'input/'+secret.CODEBOOK_B
 
-IRR_AGREEMENT_INPUT_FILE = "input/" + secret.IRR_AGREEMENT_INPUT_FILE
 IRR_AGREEMENT_COLUMNS = secret.IRR_AGREEMENT_COLUMNS
+CODERS_COLUMNS = secret.CODERS_COLUMNS

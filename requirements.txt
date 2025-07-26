@@ -7,3 +7,4 @@ krippendorff
 thefuzz
 sentence-transformers
 simpledorff
+networkx
