@@ -8,6 +8,7 @@ CODER_NAME_COLUMN = "Coder"
 
 OUTPUT_MERGEED_FILE = 'input/codebook.csv'
 OUTPUT_MERGED_IRR_DATA_FILE = 'merged_irr_data.csv'
+# OUTPUT_MERGED_IRR_DATA_FILE = 'merged_irr_data_p01_to_p06.csv'
 IRR_AGREEMENT_INPUT_FILE = "output/" + OUTPUT_MERGED_IRR_DATA_FILE
 # ==============================================================================
 # === Chart Configuration               ========================================

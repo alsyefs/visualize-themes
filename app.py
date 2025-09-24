@@ -12,10 +12,11 @@ def main():
     while True:
         print("\nHow would you like to proceed?")
         print("1. Generate HTML report. (Requires 'input/codebook.csv' file)")
-        print("2. Merge, mark agreements, and calculate scores. (Requires CSV files in 'irr_input' directory)")
-        print("3. Create LaTeX appendix of codebook. (Requires 'input/codebook.csv' file)")
-        print("4. Just Merge all codebooks. (Requires 'input/codebook.csv' file)")
-        print("5. Merge code text CSV files (Specific to QualCoder code_text table format). (Requires 'input/code_text.csv' files)")
+        print("2. Merge and mark agreements. (Requires CSV files in 'irr_input' directory)")
+        print("3. Compare agreement columns in a CSV file. (Requires 'output/merged_irr_data.csv' file)")
+        print("4. Create LaTeX appendix of codebook. (Requires 'input/codebook.csv' file)")
+        print("5. Just Merge all codebooks. (Requires 'input/codebook.csv' file)")
+        print("6. Merge code text CSV files (Specific to QualCoder code_text table format). (Requires 'input/code_text.csv' files)")
         print("0. Exit")
         choice = input("Enter your choice (0-5): ")
         if choice == '1':  # Generate HTML report
@@ -23,6 +24,7 @@ def main():
         elif choice == '2':
             calculate_irr.main()
             mark_agreements.main()
+        elif choice == '3':
             compare_agreement_columns.main()
         elif choice == '3':
             create_latex_appendix_of_codebook.main()
