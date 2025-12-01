@@ -1,7 +1,8 @@
 import pandas as pd
 import os
 from typing import List
-from config import CODEBOOK_A, CODEBOOK_B, OUTPUT_MERGEED_FILE
+from config import CODEBOOKS_BY_CODERS, OUTPUT_MERGED_FILE
+
 
 def merge_csv_files(input_files: List[str], output_file: str):
     """
@@ -10,7 +11,7 @@ def merge_csv_files(input_files: List[str], output_file: str):
     Args:
         input_files: A list of paths to the input CSV files.
         output_file: The path to save the merged CSV file.
-    
+
     Returns:
         None
     """
@@ -24,10 +25,10 @@ def merge_csv_files(input_files: List[str], output_file: str):
             if not os.path.exists(file):
                 print(f"Warning: File not found at {file}. Skipping.")
                 continue
-            
+
             # Read the CSV file into a pandas DataFrame
             # Added error_bad_lines=False and warn_bad_lines=True to handle potential parsing issues
-            df = pd.read_csv(file, on_bad_lines='warn')
+            df = pd.read_csv(file, on_bad_lines="warn")
             df_list.append(df)
             print(f"Successfully loaded {file} with {len(df)} rows.")
 
@@ -52,17 +53,21 @@ def merge_csv_files(input_files: List[str], output_file: str):
     except Exception as e:
         print(f"Error writing to {output_file}: {e}")
 
+
 def main():
-    files_to_merge = [CODEBOOK_A, CODEBOOK_B]
-    output_filename = OUTPUT_MERGEED_FILE
+    files_to_merge = CODEBOOKS_BY_CODERS
+    output_filename = OUTPUT_MERGED_FILE
     print("Starting the CSV merge process...\n")
     merge_csv_files(files_to_merge, output_filename)
     if os.path.exists(output_filename):
-        print(f"\nProcess complete. You can find the merged data in '{output_filename}'.")
+        print(
+            f"\nProcess complete. You can find the merged data in '{output_filename}'."
+        )
     else:
-        print("\nProcess finished, but the output file was not created. Please check for errors above.")
+        print(
+            "\nProcess finished, but the output file was not created. Please check for errors above."
+        )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
-    
-

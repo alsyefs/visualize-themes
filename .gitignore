@@ -1,13 +1,19 @@
 code/
+codebook_definitions/*
+!codebook_definitions/.gitkeep
 notes/
 input/*
 !input/.gitkeep
-output/*
-!output/.gitkeep
-secret.py
 irr_input/*
 !irr_input/.gitkeep
-# --- Standard Python Ignores ---
+out/
+output/*
+!output/.gitkeep
+transcripts/*
+!transcripts/.gitkeep
+secret.py
 # Ignore Python bytecode files
 __pycache__/
 *.pyc
+codetexts/*
+!codetexts/.gitkeep

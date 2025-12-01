@@ -1,0 +1,42 @@
+' To preview: Alt + D
+' To export: Ctrl + Shift + P -> "PlantUML: Export Current Diagram" -> Select format
+@startuml
+skinparam state {
+    BackgroundColor White
+    BorderColor Black
+    StartColor Black
+    EndColor Black
+}
+skinparam shadowing false
+
+title Methodology: Intersection Filtering Logic
+
+state "Raw Transcript Data" as Raw
+
+state "Filter Logic" as Filter {
+    state "Coder A Selection" as A
+    state "Coder B Selection" as B
+    
+    state "Check Overlap\n(Jaccard > 0.30)" as Check
+    
+    state "<b>INTERSECTION</b>\n(Mutual Identification)" as Mut #lightgreen
+    state "<b>OMISSION</b>\n(Single Coder)" as Single #mistyrose
+}
+
+state "Final Calculation" as Calc {
+    state "Calculate F1 & Kappa" as Stats
+}
+
+Raw --> A
+Raw --> B
+
+A --> Check
+B --> Check
+
+Check --> Mut : Both identified segment
+Check --> Single : Only one identified segment
+
+Single --> [*] : <b>Discard/Ignore</b>\n(Attentional Variance)
+Mut --> Stats : <b>Process</b>\n(Classification Reliability)
+
+@enduml

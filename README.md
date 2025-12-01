@@ -1,215 +1,86 @@
-# Codebook Visualization App
+# 📊 Inter-Rater Reliability (IRR) & Codebook Visualizer
 
-This application provides a suite of tools for qualitative data analysis, designed to work with CSV files exported from **QualCoder**.
-
----
-
-## 🚀 Main Features
-
-1.  **Interactive HTML Report**: Creates a dynamic HTML report to explore and visualize your qualitative data from a `codebook.csv` file. The report automatically groups codes under their parent categories, includes participant filtering, and generates interactive charts.
-2.  **LaTeX Appendix Generation**: Generates a LaTeX table from your codebook data, suitable for an academic paper's appendix. You can choose from multiple formats (Condensed, Very Short, Short, Long).
-3.  **Inter-Rater Reliability (IRR) Calculation**: Calculates IRR scores (Fleiss' Kappa or Krippendorff's Alpha) from multiple codebook files. It merges codebooks, marks agreements based on text and subtext matching, and generates a detailed report.
-4.  **Codebook Merging**: Merges multiple `codebook.csv` files into a single file.
-5.  **Code-Text Merging**: Merges `code_text.csv` files exported from QualCoder.
-
----
-
-## 📂 Project Structure
-
-```
-visualize-themes/
-├── app.py                          # Main application entry point
-├── create_html_report.py           # HTML report generator
-├── create_latex_appendix_of_codebook.py  # LaTeX table generator
-├── calculate_irr.py                # Merges codebooks for IRR
-├── mark_agreements.py              # Marks agreements in merged IRR data
-├── compare_agreement_columns.py    # Calculates and compares agreement scores
-├── merge_codebooks.py              # Utility to merge codebooks
-├── merge_code_text.py              # Utility to merge code_text files
-├── config.py                       # Configuration settings
-├── secret.py                       # Chart configuration (project-specific)
-├── requirements.txt                # Python dependencies
-├── input/                          # Input directory for codebook.csv
-├── irr_input/                      # Input directory for IRR calculation files
-├── output/                         # Generated reports and files
-└── ...
-```
-
----
-
-## ⚙️ Input File Requirements
-
-For the application to work correctly, your `codebook.csv` file **must** adhere to the following structure and formatting rules.
-
-#### 1. File Origin
-
-This application is designed to parse CSV files exported from **QualCoder**. While you can create the CSV manually, using a QualCoder export is highly recommended.
-
-The CSV file must have these headers: `Codename`, `Coded_Memo`, `Coded`, `File`, and `Coder`.
-
-| Codename                   | Coded_Memo                 | Coded                                    | File               | Coder |
-| :------------------------- | :------------------------- | :--------------------------------------- | :----------------- | :---- |
-| `my-category:some-code`    | A description for this code| "This is a direct quote from the source."| interviews/p01.txt | Saleh |
-| `my-category:another-code` |                            | "Another quote for a different code."    | interviews/p01.txt | Saleh |
-| `other-topic:third-code`   | A memo for the third code. | "A final quote for another category."    | interviews/p02.txt | Saleh |
-
-#### 2. Code Naming Format
-
-All codes in the `Codename` column **must** be formatted as `category-name:code-name`, with the category and code separated by a colon (`:`).
-
-* Use **kebab-case** for names (all lowercase, with words separated by hyphens).
-* **Example:** A code named "Community Support" belonging to the "Social Factors" category should be written as `social-factors:community-support`.
-
----
-
-## 🔧 Configuration
-
-Before running the application, you may need to adjust settings in the configuration files.
-
-### Chart Configuration
-
-The interactive HTML report can generate up to three special, standalone charts for specific categories. To configure these, edit the `secret.py` file:
-
-```python
-CATEGORY_1_FOR_CHART = "your-category-name"
-CATEGORY_1_FOR_CHART_TITLE = "Your Chart Title"
-# ... repeat for categories 2 and 3
-```
-
-### Inter-Rater Reliability (IRR) Calculator
-
-The `calculate_irr.py` script uses `config.py` to identify the correct columns in your CSV files. Ensure these match your data:
-
-* **`INPUT_DIRECTORY`**: The folder where your codebooks are, usually `"irr_input"`.
-* **`TEXT_COLUMN`**: The column with the text segment that was coded (e.g., `"Coded"`).
-* **`CODE_COLUMN`**: The column with the code name (e.g., `"Codename"`).
-* **`CODER_NAME_COLUMN`**: The column identifying the coder (e.g., `"Coder"`).
-
----
-
-## 📦 Dependencies
-
-This application requires the following Python packages.
-
-* `plotly`
-* `pandas==2.2.2`
-* `matplotlib`
-* `statsmodels`
-* `numpy==1.26.4`
-* `krippendorff`
-* `thefuzz`
-* `sentence-transformers`
-* `simpledorff`
-* `networkx`
-
----
+This tool automates the process of merging qualitative coding datasets, calculating Inter-Rater Reliability statistics (Cohen's Kappa, F1-Score/Dice, Krippendorff's Alpha), and generating an interactive HTML dashboard for visualization.
 
 ## ▶️ How to Run This App
 
-Follow the setup steps first. You will only need to do this setup once.
+These instructions are compatible with **Windows**, **macOS**, and **Linux**.
 
-### Setup Steps (1-4)
+### 1. Prerequisites
+* **Install Python**: Ensure you have Python installed (version 3.9 or higher is recommended). [Download Python here](https://www.python.org/downloads/).
+* **Git (Optional)**: If you are cloning this repository.
 
-#### Step 1: Add Your Data File(s)
+### 2. Setup (One-Time Only)
 
-* **For visualization or the LaTeX appendix:** Place your `codebook.csv` file into the `input` folder.
-* **For IRR calculation:** Place *all* codebook CSV files (at least two) from the different coders into the `irr_input` folder.
+#### Step 1: Prepare Your Data Folders
+Before running the script, you must place your files in the correct directories:
 
-#### Step 2: Create a Virtual Environment
+| Folder | Required? | Description |
+| :--- | :--- | :--- |
+| **`irr_input/`** | **YES** | Place your raw codebook CSV files here. <br>• **Minimum:** 1 file (for single-coder visualization).<br>• **Recommended:** 2+ files (to calculate agreement/IRR stats). |
+| **`transcripts/`** | *Optional* | Place the original raw text/transcript files (`.txt`) here.<br>• **If Provided:** The app calculates "True Negatives" (silence), making **Cohen's Kappa** mathematically valid.<br>• **If Omitted:** Cohen's Kappa may be reported as "Invalid/Missing" or biased, but **F1-Scores** will still be correct. |
+| **`codebook_definitions/`** | *Optional* | Place a CSV or Excel file defining your codes (columns: *Codename*, *Description*, etc.) to include definitions in the report. |
 
+#### Step 2: Open Your Terminal
+* **Windows**: Open PowerShell or Command Prompt.
+* **macOS**: Open Terminal (Cmd + Space, type "Terminal").
+* **Linux**: Open your preferred terminal.
+
+#### Step 3: Create and Activate a Virtual Environment
+This keeps your project dependencies isolated.
+
+**Windows:**
+```powershell
+# Create environment
+python -m venv venv
+
+# Activate environment
+.\venv\Scripts\activate
+```
+(Note: If you see a permission error in PowerShell, try `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`)
+
+**Linux / macOS:**
 ```bash
-python -m venv code
+# Create environment
+python3 -m venv venv
+
+# Activate environment
+source venv/bin/activate
 ```
 
-#### Step 3: Activate the Environment
-
-* **On Linux or macOS:**
-    ```bash
-    source code/bin/activate
-    ```
-* **On Windows (in Command Prompt):**
-    ```
-    code\Scripts\activate
-    ```
-* **On Windows (in PowerShell):**
-    ```powershell
-    code\Scripts\Activate.ps1
-    ```
-
-#### Step 4: Install the Requirements
-
-```bash
+#### Step 4: Install Dependencies
+```python
 pip install -r requirements.txt
 ```
-
 ---
-
-### Running the Main Application
-
-Once the setup is complete, run the main application to access all functions.
-
-* **Run the App:**
-    ```bash
-    python app.py
-    ```
-* **Choose Your Function:**
-    The app will present a menu:
-    1.  Generate HTML report
-    2.  Merge, mark agreements, and calculate IRR scores
-    3.  Create LaTeX appendix of codebook
-    4.  Just Merge all codebooks
-    5.  Merge code text CSV files
-    0.  Exit
-
+#### 🚀 Running the Analysis
+Once your files are in `irr_input` (and optionally `transcripts`), run the main application:
+```python
+python app.py
+```
+The script will automatically perform the following 4 steps:
+1. **Merge Codebooks**: Combines individual coder files into a master dataset.
+2. **Process Agreements**: Identifies overlaps and stitches text segments based on fuzzy matching (configurable in `config.py`).
+3. **Calculate Statistics**: Computes F1, Kappa, and Agreement % based on the merged data.
+4. **Generate Report**: Specific HTML and Excel outputs are created.
 ---
-
-## 📄 Individual Function Details
-
-#### Option 1: Interactive HTML Report
-
-* **Features:**
-    * Hierarchical code browser organized by categories
-    * Interactive charts and visualizations
-    * Participant and coder filtering
-    * Dynamic chart updates based on filters
-* **Output:**
-    * `output/codes.html`: Main interactive report.
-
-#### Option 2: Merge, Mark Agreements, and Calculate IRR
-
-This option runs a sequence of scripts to perform a full IRR analysis.
-
-1.  **`calculate_irr.py`**: Merges all codebooks from the `irr_input` directory into a single file (`output/merged_irr_data.csv`) and creates a preliminary log (`output/first_merge_notes.txt`).
-2.  **`mark_agreements.py`**: Calculates agreement based on direct coding and subtext matching, and adds `_agreement` columns to the `output/merged_irr_data.csv` file.
-3.  **`compare_agreement_columns.py`**: Calculates Cohen's Kappa and Krippendorff's Alpha based on the agreement columns and generates a final report (`output/agreements.txt`).
-
-* **Output Files:**
-    * `output/merged_irr_data.csv`: A CSV file combining all input codebooks, with agreement columns.
-    * `output/first_merge_notes.txt`: A log of the initial merging process.
-    * `output/agreements.txt`: A detailed report of the final IRR scores with interpretation.
-
-#### Option 3: LaTeX Appendix Table
-
-* **Choose a Format:**
-    * Condensed, Very Short, Short, or Long.
-* **Output:**
-    * A `.tex` file in the `output` folder (e.g., `output/appendix_codebook_condensed.tex`).
-
-#### Option 4: Just Merge All Codebooks
-
-* Merges all `codebook.csv` files from the `input` directory into a single `input/codebook.csv` file.
-
-#### Option 5: Merge code text CSV files
-
-* Merges `code_text.csv` files (as specified in `config.py`) into `output/merged_code_text.csv`. This is useful for combining data from different QualCoder projects.
-
+#### 📊 Viewing the Results
+Navigate to the `output/` folder to find your results:
+1. `codes.html` (Main Report):
+    - Open this file in any web browser (Chrome, Edge, Safari).
+    - **Browser Tab**: View and filter coded segments interactively.
+    - **Charts Tab**: Visualize disagreement distributions and coder volume.
+    - **Analysis Details Tab**: View the calculated IRR statistics.
+        - Note on Kappa: If you did **not** provide transcripts, look for the "Technical Notes" section regarding the "Prevalence Paradox" and why F1-Score might be the preferred metric.
+2. `agreements.txt`: A text summary of the statistical scores (useful for copying into academic papers).
+3. `merged_irr_data.csv`: The raw dataset used for calculation, showing how segments were merged and aligned.
 ---
-
-## 🤔 Troubleshooting
-
-1.  **Missing Dependencies**: Ensure you've activated the virtual environment and installed the requirements.
-2.  **File Not Found**: Check that your CSV files are in the correct directories (`input/` or `irr_input/`).
-3.  **Column Mismatch**: Verify your CSV has the required columns: `Codename`, `Coded_Memo`, `Coded`, `File`, `Coder`.
-4.  **Code Format**: Ensure all codes follow the `category:code` format with kebab-case naming.
-
-For more detailed error messages, check the log files generated in the `output` directory.
+#### ⚙️ Advanced Configuration (`config.py`)
+You can modify `config.py` to change how the algorithm handles text:
+- `WORDS_OVERLAP_PERCENTAGE` (Default: 0.30): How much text must overlap for two segments to be considered the "same" segment (30%).
+- `CALCULATE_SCORES_ON_MUTUAL_SEGMENTS_ONLY`:
+    - `True` (Default): Ignores "silence" (omissions). Only calculates disagreement if both coders marked the same area but with different codes.
+    - `False`: Strict mode. If Coder A marks text and Coder B does not, it counts as a disagreement.
+- `ALIGN_SEGMENTS_ACROSS_CODES`:
+    - `False` (Default): 'Code A' and 'Code B' are treated as separate rows, even if they cover the same text.
+    - `True`: Forces different codes on the same text to be aligned into a single row (creating a direct conflict).
