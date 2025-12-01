@@ -32,20 +32,20 @@ This keeps your project dependencies isolated.
 **Windows:**
 ```powershell
 # Create environment
-python -m venv venv
+python -m venv code
 
 # Activate environment
-.\venv\Scripts\activate
+.\code\Scripts\activate
 ```
 (Note: If you see a permission error in PowerShell, try `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`)
 
 **Linux / macOS:**
 ```bash
 # Create environment
-python3 -m venv venv
+python3 -m venv code
 
 # Activate environment
-source venv/bin/activate
+source code/bin/activate
 ```
 
 #### Step 4: Install Dependencies
