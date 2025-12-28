@@ -1,8 +1,9 @@
+# backend/merge_code_text.py
 import pandas as pd
 import os
-from config import CODETEXTS_BY_CODERS
+from backend import config
 
-INPUT_CODE_TEXT_FILES = CODETEXTS_BY_CODERS
+INPUT_CODE_TEXT_FILES = config.CODETEXTS_BY_CODERS
 
 
 def merge_csv_files(file_list, output_filename):
@@ -99,7 +100,7 @@ def main():
     files_to_merge = INPUT_CODE_TEXT_FILES
 
     # This will be the name of your final, combined file.
-    output_file = "output/merged_code_text.csv"
+    output_file = config.CODETEXT_OUTPUT_FILE
     # End Configuration
 
     merge_csv_files(files_to_merge, output_file)

@@ -1,7 +1,8 @@
+# backend/mark_agreements.py
 import pandas as pd
 import os
 import itertools
-import config
+import backend.config as config
 import re
 import difflib
 from datetime import datetime
@@ -9,7 +10,7 @@ from datetime import datetime
 # Configuration
 INPUT_CSV_FILE = config.IRR_AGREEMENT_INPUT_FILE
 OUTPUT_CSV_FILE = config.IRR_AGREEMENT_INPUT_FILE
-NOTES_FILE = "output/first_merge_notes.txt"
+NOTES_FILE = config.NOTES_FILE
 
 
 def stitch_text(text1, text2):
@@ -38,7 +39,17 @@ def calculate_agreement(input_file: str, output_file: str):
         return
 
     # Identify Coders
-    base_meta_cols = ["id", "p", "text", "code", "memo", "all_agree"]
+    # Added "is_true_negative" to base_meta_cols to prevent it from being treated as a coder
+    base_meta_cols = [
+        "id",
+        "p",
+        "text",
+        "code",
+        "memo",
+        "all_agree",
+        "TN",
+        "ignored",
+    ]
     coders = [
         c
         for c in df.columns
@@ -147,6 +158,12 @@ def calculate_agreement(input_file: str, output_file: str):
                     if df.loc[idx2, coder] == 1:
                         df.loc[idx1, coder] = 1
 
+                # Merge TN status
+                # If one row was valid code (TN=0) and one was noise/TN (TN=1), the result is valid code (TN=0)
+                # Logic: TN remains 1 only if BOTH were 1. Since we found overlap, likely they are coded.
+                if df.loc[idx1, "TN"] == 0 or df.loc[idx2, "TN"] == 0:
+                    df.loc[idx1, "TN"] = 0
+
                 # 5. Merge Memos (as before)
                 memo1 = str(df.loc[idx1, "memo"])
                 memo2 = str(df.loc[idx2, "memo"])
@@ -171,6 +188,8 @@ def calculate_agreement(input_file: str, output_file: str):
 
     # Append detailed merge stats to the notes file for the HTML report
     try:
+        if os.path.dirname(NOTES_FILE):
+            os.makedirs(os.path.dirname(NOTES_FILE), exist_ok=True)
         with open(NOTES_FILE, "a", encoding="utf-8-sig") as f:
             f.write("\n" + "=" * 40 + "\n")
             f.write("      FUZZY MATCH MERGE PHASE\n")
@@ -185,29 +204,160 @@ def calculate_agreement(input_file: str, output_file: str):
     except Exception as e:
         print(f"Warning: Could not update notes file: {e}")
 
+    # Ensure TN rows are removed if they overlap with ANY coded row (Cross-Code Check).
+    # This handles cases where string matching failed in calculate_irr.py but tokens match.
+    print("Phase 2.5: Pruning True Negatives that overlap with coded segments...")
+    tn_indices_to_drop = set()
+
+    if "TN" in df.columns:
+        # 1. Build a Smart ID Map (Map 'p07-answers' -> 'p07')
+        unique_ids = df["p"].dropna().unique()
+        # Sort by length (shortest first) to find the "root" ID
+        sorted_ids = sorted(unique_ids, key=lambda x: len(str(x)))
+        id_map = {}
+
+        for pid in unique_ids:
+            pid_str = str(pid).lower()
+            mapped = pid
+            # Check if this ID starts with any shorter ID (e.g. 'p07-answers' starts with 'p07')
+            for short_id in sorted_ids:
+                s_str = str(short_id).lower()
+                if pid == short_id:
+                    continue
+                # Match if it starts with the short ID followed by a separator or is roughly same
+                if pid_str.startswith(s_str):
+                    mapped = short_id
+                    break
+            id_map[pid] = mapped
+
+        # 2. Create a temporary normalization column
+        df["_norm_p"] = df["p"].map(id_map)
+
+        # 3. Group by the NORMALIZED ID to compare 'p07' Coded vs 'p07-answers' TNs
+        for norm_p, group_indices in df.groupby("_norm_p").groups.items():
+            # Get the actual subset of the dataframe using indices
+            p_group = df.loc[group_indices]
+
+            tn_rows = p_group[p_group["TN"] == 1]
+            coded_rows = p_group[p_group["TN"] == 0]
+
+            if tn_rows.empty or coded_rows.empty:
+                continue
+
+            # Check every TN against every Coded row in this cluster
+            for tn_idx, tn_row in tn_rows.iterrows():
+                tn_tokens = df.loc[tn_idx, "_tokens"]
+                if not isinstance(tn_tokens, set) or len(tn_tokens) == 0:
+                    continue
+
+                is_covered = False
+                for coded_idx, coded_row in coded_rows.iterrows():
+                    coded_tokens = df.loc[coded_idx, "_tokens"]
+                    if not isinstance(coded_tokens, set) or not coded_tokens:
+                        continue
+
+                    intersection = len(tn_tokens & coded_tokens)
+                    union = len(tn_tokens | coded_tokens)
+                    if union == 0:
+                        continue
+
+                    overlap = intersection / union
+
+                    if overlap >= config.WORDS_OVERLAP_PERCENTAGE:
+                        is_covered = True
+                        break
+
+                if is_covered:
+                    tn_indices_to_drop.add(tn_idx)
+
+        # Clean up temp column
+        if "_norm_p" in df.columns:
+            df.drop(columns=["_norm_p"], inplace=True)
+
+    if tn_indices_to_drop:
+        print(
+            f"   -> Dropping {len(tn_indices_to_drop)} True Negative rows that overlapped with coded segments."
+        )
+        df.drop(index=list(tn_indices_to_drop), inplace=True)
+
     if "_tokens" in df.columns:
         df.drop(columns=["_tokens"], inplace=True)
 
-    # Phase 3: Initialize/Update Agreement Columns
-    # Now that rows are merged, we simply mirror the coder columns to agreement columns
+    # Phase 3: Initialize/Update Agreement Columns (REMOVED)
+    # The user requested to remove _agreement columns.
     agreement_cols = []
-    for coder in coders:
-        ag_col = f"{coder}_agreement"
-        agreement_cols.append(ag_col)
-        df[ag_col] = df[coder]
 
     # Phase 4: Calculate Overall Agreement
     print("Calculating overall 'all_agree' column...")
 
     num_coders = len(coders)
     # Calculate sums to determine agreement
-    sums = df[agreement_cols].sum(axis=1)
+    # Use coders list directly, not agreement_cols
+    sums = df[coders].sum(axis=1)
 
-    # Mark as agreed if ALL coders matched (sum == num_coders) OR if ALL were silent (sum == 0)
-    df["all_agree"] = ((sums == num_coders) | (sums == 0)).astype(int)
+    # Mark as agreed if ALL coders matched (sum == num_coders)
+    # User Request: If sums == 0, TN=1 and all_agree=0
+    df["all_agree"] = (sums == num_coders).astype(int)
+
+    # Update TN based on sums (re-enforce consistency)
+    df.loc[sums == 0, "TN"] = 1
+    df.loc[sums > 0, "TN"] = 0
+
+    print("Calculating 'ignored' column based on Strijbos Method...")
+    df["ignored"] = 0
+    method = getattr(config, "STRIJBOS_METHOD", "METHOD_C")
+
+    # Helper to identify Omissions vs Conflicts (Only needed for Method A logic)
+    if method == "METHOD_A":
+        # Group by segment to analyze context
+        for _, group in df.groupby(["p", "text"]):
+            # Build code sets
+            coder_code_sets = {c: set() for c in coders}
+            for idx, row in group.iterrows():
+                code = row["code"]
+                for c in coders:
+                    if row[c] == 1:
+                        coder_code_sets[c].add(code)
+
+            for idx, row in group.iterrows():
+                # If True Negative, ignore in Method A
+                if row.get("TN", 0) == 1:
+                    df.at[idx, "ignored"] = 1
+                    continue
+
+                # If Full Agreement, keep (not ignored)
+                if row[coders].sum() == len(coders):
+                    continue
+
+                # Check Conflict vs Omission
+                is_conflict = False
+                for c in coders:
+                    if row[c] == 0:
+                        my_codes = coder_code_sets[c]
+                        # Get all codes used by ANYONE ELSE
+                        other_coders = [oc for oc in coders if oc != c]
+                        all_other_codes = set()
+                        for oc in other_coders:
+                            all_other_codes.update(coder_code_sets[oc])
+
+                        # It is a CONFLICT if I have a code that nobody else has.
+                        # It is an OMISSION if my codes are just a subset of the group's codes.
+                        if not my_codes.issubset(all_other_codes):
+                            is_conflict = True
+                            break
+
+                # If it's NOT a conflict (meaning it IS an omission), ignore it in Method A
+                if not is_conflict:
+                    df.at[idx, "ignored"] = 1
+
+    elif method == "METHOD_B":
+        # Method B ignores True Negatives, but keeps Omissions
+        if "TN" in df.columns:
+            df.loc[df["TN"] == 1, "ignored"] = 1
+
+    # Method C keeps everything (ignored stays 0)
 
     # Filter Omissions (The "AnyDesk" & "Revenge" Fix)
-    # This physically removes the rows from the CSV if one coder missed them (and didn't conflict).
     if config.CALCULATE_SCORES_ON_MUTUAL_SEGMENTS_ONLY:
         print(
             "Applying Omission Filter (dropping rows where one coder missed a code that wasn't a conflict)..."
@@ -255,30 +405,19 @@ def calculate_agreement(input_file: str, output_file: str):
                     # It is an Omission (Subset).
                     # Keep the row and treat as agreement for stats, but do NOT modify original coder columns.
                     indices_to_keep.append(idx)
-
-                    # 1. Force global agreement flag
                     df.at[idx, "all_agree"] = 1
-
-                    # 2. Update ONLY the hidden agreement columns to 1.
-                    # This ensures stats (Kappa/F1) count this as an agreement,
-                    # while the UI/CSV still shows the coder didn't actually click this code.
-                    for c in coders:
-                        ag_col = f"{c}_agreement"
-                        if ag_col in df.columns:
-                            df.at[idx, ag_col] = 1
-
-        initial_count = len(df)
-        df = df.loc[indices_to_keep]
-        print(f"Filtered {initial_count - len(df)} rows. Remaining: {len(df)}.")
 
     # Reset index and regenerate 'id' column so IDs match the new row count
     df.reset_index(drop=True, inplace=True)
     df["id"] = range(1, 1 + len(df))
 
     # Save
-    # Added "memo" to base_cols so it is written to the final CSV
+    # Added "TN" to base_cols so it is written to the final CSV
     base_cols = ["id", "p", "text", "code", "memo"]
-    final_cols = base_cols + coders + agreement_cols + ["all_agree"]
+
+    # Ensure 'ignored' is the very last column
+    final_cols = base_cols + coders + ["all_agree", "TN", "ignored"]
+
     cols_to_save = [c for c in final_cols if c in df.columns]
     df = df[cols_to_save]
 
@@ -328,7 +467,7 @@ def append_methodology_note(notes_file):
     # Build the Plain Text Report
     text = f"""
 PROCESSING LOG & METHODOLOGY ({timestamp})
-============================================================
+==========================================================================================
 This log details the specific algorithms and parameters used 
 to process the dataset.
 
@@ -336,6 +475,9 @@ to process the dataset.
 ---------------------------------
    PARAMETER : {config.WORDS_OVERLAP_PERCENTAGE * 100}% Word Overlap
    METHOD    : Token-based Jaccard similarity.
+   ACTION 1  : Merged duplicate coded segments (within same code).
+   ACTION 2  : Pruned 'True Negatives' that overlapped with coded segments 
+               (fixing artifacts from strict string matching).
    REASONING : Qualitative coding often suffers from granularity differences 
                (e.g., selecting a sentence vs. a paragraph).
    OUTCOME   : Segments with >{config.WORDS_OVERLAP_PERCENTAGE * 100}% overlap were merged into a single unit 
@@ -366,9 +508,11 @@ to process the dataset.
                by subtracting coded words from the total transcript length. 
                This is required to calculate Cohen's Kappa.
 
-============================================================
+==========================================================================================
 """
     try:
+        if os.path.dirname(notes_file):
+            os.makedirs(os.path.dirname(notes_file), exist_ok=True)
         with open(notes_file, "a", encoding="utf-8-sig") as f:
             f.write(text)
         print(f"Appended methodology notes to '{notes_file}'")

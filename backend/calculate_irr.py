@@ -1,11 +1,13 @@
+# backend/calculate_irr.py
 import os
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import config
+import backend.config as config
 import re
+import glob
 
-OUTPUT_DIR = "output"
+OUTPUT_DIR = config.OUTPUT_DIRECTORY
 
 
 def log_note(message, filepath, print_to_console=True):
@@ -24,7 +26,7 @@ def initialize_notes_file(filepath):
     with open(filepath, "w", encoding="utf-8-sig") as f:
         f.write("IRR Calculation Notes\n")
         f.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write("=" * 40 + "\n\n")
+        f.write("=" * 90 + "\n\n")
 
 
 def clean_text(text):
@@ -53,10 +55,146 @@ def clean_text(text):
     return text.strip()
 
 
+def load_transcripts_and_inject_negatives(
+    df, transcript_dir, coder_cols, notes_filepath
+):
+    """
+    Matches coded segments to Master List and fills unmatched
+    sentences with 0 (True Negatives).
+    """
+    if not os.path.exists(transcript_dir):
+        log_note(
+            f"Notice: Transcript directory '{transcript_dir}' not found. Skipping Master List generation.",
+            notes_filepath,
+        )
+        return df
+
+    log_note(
+        "Phase 2: Processing Master Sentence List from Transcripts...", notes_filepath
+    )
+
+    transcript_files = glob.glob(os.path.join(transcript_dir, "*.txt"))
+    if not transcript_files:
+        log_note("Notice: No .txt files found in transcript directory.", notes_filepath)
+        return df
+
+    new_rows = []
+    # Create a lookup set of existing normalized text to avoid duplicates
+    # We group by participant to ensure we only match within the correct file
+    existing_text_map = {}
+    for p_id in df["p"].unique():
+        # Get all text currently coded for this participant
+        p_texts = df[df["p"] == p_id]["text"].astype(str).str.lower().tolist()
+        existing_text_map[p_id] = p_texts
+
+    injected_count = 0
+
+    for filepath in transcript_files:
+        # Extract participant ID from filename (assuming 'P07.txt' -> 'p07')
+        filename = os.path.basename(filepath)
+        p_id = filename.split(".")[0].lower()
+
+        try:
+            with open(filepath, "r", encoding="utf-8-sig") as f:
+                content = f.read()
+
+            # Rule 1: Code at the single sentence level.
+            # Handle mixed formatting (paragraphs vs lines) by first normalizing line endings
+            content = content.replace("\r\n", "\n").replace("\r", "\n")
+
+            # Split into initial chunks (paragraphs or manual lines)
+            raw_chunks = [line.strip() for line in content.split("\n") if line.strip()]
+
+            sentences = []
+            for chunk in raw_chunks:
+                # Regex to split sentences while respecting quotes:
+                # Splits by [.!?] optionally followed by a quote ["”’], then whitespace.
+                # We capture the delimiter (punctuation) to re-attach it to the sentence.
+                parts = re.split(r'([.!?]["”’]?)\s+', chunk)
+
+                # Re-assemble: parts[0] is text, parts[1] is punctuation, parts[2] is text...
+                if len(parts) == 1:
+                    # No split occurred
+                    sentences.append(parts[0])
+                else:
+                    current_sent = parts[0]
+                    # Loop through delimiters and next segments
+                    for i in range(1, len(parts), 2):
+                        delimiter = parts[i]
+                        next_text = parts[i + 1] if i + 1 < len(parts) else ""
+
+                        # Re-attach punctuation to the current sentence
+                        current_sent += delimiter
+                        if current_sent.strip():
+                            sentences.append(current_sent.strip())
+
+                        current_sent = next_text
+
+                    # Append any remaining text after the last punctuation
+                    if current_sent.strip():
+                        sentences.append(current_sent.strip())
+
+            current_coded_texts = existing_text_map.get(p_id, [])
+
+            for sentence in sentences:
+                clean_sent = clean_text(sentence)
+                if not clean_sent:
+                    continue
+
+                norm_sent = clean_sent.lower()
+
+                # MATCHING LOGIC:
+                # Check if this transcript sentence is already "covered" by a coded segment.
+                # strict match OR substring match (if coder selected part of sentence)
+                is_matched = False
+
+                # 1. Exact/Substring check against existing codes
+                # This prevents adding a "True Negative" for a sentence that was actually coded
+                for existing in current_coded_texts:
+                    # If the coded text is inside the master sentence, or master is inside coded
+                    # we assume it's "matched" (coded) and do NOT add a 0-0 row.
+                    if existing in norm_sent or norm_sent in existing:
+                        is_matched = True
+                        break
+
+                if not is_matched:
+                    row = {
+                        "p": p_id,
+                        "text": clean_sent,
+                        "code": "None",
+                        "memo": "",
+                        "all_agree": 0,
+                        "TN": 1,
+                    }
+                    # Set all coders to 0
+                    for c in coder_cols:
+                        row[c] = 0
+
+                    new_rows.append(row)
+                    injected_count += 1
+
+        except Exception as e:
+            log_note(f"Error reading transcript {filename}: {e}", notes_filepath)
+
+    if new_rows:
+        negatives_df = pd.DataFrame(new_rows)
+        # Combine and ensure ID is unique later
+        df = pd.concat([df, negatives_df], ignore_index=True)
+        log_note(
+            f"   -> Injected {injected_count} 'True Negative' (0-0) rows from Master List.",
+            notes_filepath,
+        )
+    else:
+        log_note(
+            "   -> No unmatched sentences found (or matching failed).", notes_filepath
+        )
+
+    return df
+
+
 def load_and_prepare_data(
     input_dir, file_col, text_col, code_col, coder_col, memo_col, notes_filepath
 ):
-    CODERS_AGREEMENT_COLS = []
     log_note("Step 1: Loading and Preparing Data", notes_filepath)
 
     # Ensure input directory exists
@@ -155,25 +293,44 @@ def load_and_prepare_data(
     if wide_df.empty:
         return None, [], [], {}
 
-    wide_df.insert(0, "id", range(1, 1 + len(wide_df)))
+    # Initialize True Negative tracker
+    wide_df["TN"] = 0
 
-    # Calculate Initial Exact Agreement
+    # Initialize TN with 0 (int) for all existing coded rows
+    wide_df["TN"] = 0
+
+    # Match and Fill True Negatives
+    # We do this BEFORE calculating 'all_agree' or saving, so the 0-0 rows exist in the raw file
+    transcripts_dir = getattr(config, "TRANSCRIPTS_DIRECTORY", "backend/transcripts")
+    wide_df = load_transcripts_and_inject_negatives(
+        wide_df, transcripts_dir, all_coders, notes_filepath
+    )
+
+    # Force clean types after injection
+    wide_df["TN"] = wide_df["TN"].fillna(0).astype(int)
+    # Ensure coder columns are ints (handle potential NaNs from merge)
+    for c in all_coders:
+        wide_df[c] = wide_df[c].fillna(0).astype(int)
+
+    # Recalculate ID after injection
+    wide_df["id"] = range(1, 1 + len(wide_df))
+
+    # Calculate Agreement Flags
     num_coders = len(all_coders)
     sums = wide_df[all_coders].sum(axis=1)
-    wide_df["all_agree"] = ((sums == num_coders) | (sums == 0)).astype(int)
 
-    CODERS_AGREEMENT_COLS.clear()
-    for coder in all_coders:
-        col_name = f"{coder}_agreement"
-        wide_df[col_name] = 0
-        CODERS_AGREEMENT_COLS.append(col_name)
+    # User Request: all_agree is 1 ONLY if everyone agrees active coding.
+    # If sums == 0 (TN), all_agree should be 0.
+    wide_df["all_agree"] = (sums == num_coders).astype(int)
 
-    final_cols = (
-        ["id", "p", "text", "code", "memo"]
-        + all_coders
-        + CODERS_AGREEMENT_COLS
-        + ["all_agree"]
-    )
+    # Ensure TN is 1 if sums is 0 (just in case they came from raw data not injection)
+    wide_df.loc[sums == 0, "TN"] = 1
+    # Ensure all_agree is 0 for TNs
+    wide_df.loc[wide_df["TN"] == 1, "all_agree"] = 0
+
+    # Removed: Loop to create _agreement columns
+
+    final_cols = ["id", "p", "text", "code", "memo"] + all_coders + ["all_agree", "TN"]
     for c in final_cols:
         if c not in wide_df.columns:
             wide_df[c] = 0
@@ -185,7 +342,8 @@ def load_and_prepare_data(
     log_note(f"Saved merged data to '{output_path}'", notes_filepath)
 
     # Return raw_stats as the 4th element
-    return wide_df, all_coders, CODERS_AGREEMENT_COLS, raw_stats
+    # Pass empty list for agreement cols to maintain signature compatibility if needed
+    return wide_df, all_coders, [], raw_stats
 
 
 def create_agreement_disagreement_files(df, coder_cols, notes_filepath, raw_stats):
@@ -201,9 +359,9 @@ def create_agreement_disagreement_files(df, coder_cols, notes_filepath, raw_stat
     disagree_pct = (disagree_count / total_rows * 100) if total_rows > 0 else 0
 
     # Write the detailed report
-    log_note("\n" + "=" * 60, notes_filepath)
-    log_note(f"{'PHASE 1: EXACT MATCH MERGE SUMMARY':^60}", notes_filepath)
-    log_note("=" * 60, notes_filepath)
+    log_note("\n" + "=" * 90, notes_filepath)
+    log_note(f"{'EXACT MATCH MERGE SUMMARY':^90}", notes_filepath)
+    log_note("=" * 90, notes_filepath)
 
     log_note("1. RAW INPUT DATA (Coding Events)", notes_filepath)
     log_note("-" * 60, notes_filepath)

@@ -1,16 +1,19 @@
-import create_html_report as create_html_report
-import calculate_irr as calculate_irr
-import create_latex_appendix_of_codebook as create_latex_appendix_of_codebook
-import merge_codebooks as merge_codebooks
-import merge_code_text as merge_code_text
-import compare_agreement_columns as compare_agreement_columns
-import mark_agreements as mark_agreements
-import config
+# /app.py
+import backend.create_html_report as create_html_report
+import backend.calculate_irr as calculate_irr
+import backend.create_latex_appendix_of_codebook as create_latex_appendix_of_codebook
+import backend.merge_codebooks as merge_codebooks
+import backend.merge_code_text as merge_code_text
+import backend.compare_agreement_columns as compare_agreement_columns
+import backend.mark_agreements as mark_agreements
+import backend.config as config
+import os
+import glob
 
 
 def main():
     run_without_options()
-    # run_with_options() # If you need to run specific functions, uncomment this.
+    # run_with_options()  # If you need to run specific functions, uncomment this.
 
 
 def run_without_options():
@@ -36,30 +39,33 @@ def run_without_options():
     print("\n" + "=" * 50)
     print("✅ SUCCESS! Analysis Complete.")
     print(f"📂 Open the following file in your browser to view results:")
-    print(f"   output/codes.html")
+    print(f"   {config.HTML_OUTPUT_FILENAME}")
     print("=" * 50)
 
 
 def run_with_options():
+    csv_files = glob.glob(os.path.join(config.INPUT_DIRECTORY, "*.csv"))
+    codetext_files = glob.glob(os.path.join(config.CODETEXTS_INPUT_DIR, "*.csv"))
+
     while True:
         print("\nHow would you like to proceed?")
         print(
-            f"1. Just merge all codebooks (inputs='{config.INPUT_DIRECTORY}/*.csv'; output='input/codebook.csv')..."
+            f"1. Just merge all codebooks (inputs='{config.INPUT_DIRECTORY}/*.csv'; output='{config.OUTPUT_MERGED_FILE}')..."
         )
         print(
-            "2. (Data Preparation phase) Merge and mark agreements. (inputs='irr_input/[all CSVs]'; output=[output/first_merge_notes.txt, output/merged_irr_data.csv])"
+            f"2. (Data Preparation phase) Merge and mark agreements. (inputs='{config.INPUT_DIRECTORY}/{[os.path.basename(f) for f in csv_files]}'; output=[{config.NOTES_FILE}, {config.IRR_AGREEMENT_INPUT_FILE}])"
         )
         print(
-            "3. (Statistical Analysis phase) Compare agreement columns in a CSV file. (input='output/merged_irr_data.csv'; output=output/agreements.txt)"
+            f"3. (Statistical Analysis phase) Compare agreement columns in a CSV file. (input='{config.IRR_AGREEMENT_INPUT_FILE}'; output='{config.OUTPUT_DETAILED_AGREEMENT_FILE_PATH}')"
         )
         print(
-            "4. Generate HTML report. (input='input/codebook.csv'; output='output/codes.html')"
+            f"4. Generate HTML report. (input='{config.OUTPUT_MERGED_FILE}'; output='{config.HTML_OUTPUT_FILENAME}')"
         )
         print(
-            "5. Create LaTeX appendix of codebook. (input='input/codebook.csv'; output=output/appendix_codebook_[selected size].tex)"
+            f"5. Create LaTeX appendix of codebook. (input='{config.OUTPUT_MERGED_FILE}'; output='{config.OUTPUT_DIRECTORY}/appendix_codebook_[selected size].tex')"
         )
         print(
-            "6. Merge code text CSV files (Specific to QualCoder code_text table format). (inputs='input/[CODETEXTS_BY_CODERS]'; output='output/merged_code_text.csv')"
+            f"6. Merge code text CSV files (Specific to QualCoder code_text table format). (inputs='{config.CODETEXTS_INPUT_DIR}/{[os.path.basename(f) for f in codetext_files]}'; output='{config.CODETEXT_OUTPUT_FILE}')"
         )
 
         print("0. Exit")

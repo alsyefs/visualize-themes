@@ -1,7 +1,8 @@
+# backend/merge_codebooks.py
 import pandas as pd
 import os
 from typing import List
-from config import CODEBOOKS_BY_CODERS, OUTPUT_MERGED_FILE
+from backend.config import CODEBOOKS_BY_CODERS, OUTPUT_MERGED_FILE
 
 
 def merge_csv_files(input_files: List[str], output_file: str):
