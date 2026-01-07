@@ -308,6 +308,49 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
     # Convert columns to integer type for robustness
     df[coder_cols] = df[coder_cols].astype(int)
 
+    # --------------------------------------------------------------------------
+    # MODE CHECK: HIERARCHY / WEIGHTED CALCULATION
+    # --------------------------------------------------------------------------
+    calc_mode = getattr(config, "AGREEMENT_CALCULATION_MODE", 1)
+    is_weighted_mode = str(calc_mode) == "2"
+
+    if is_weighted_mode:
+        print("\n" + "!" * 60)
+        print(f"   ACTIVATING WEIGHTED MODE (HIERARCHY MAPPING)")
+        print(f"   Codes will be collapsed to Categories for calculation.")
+        print("!" * 60 + "\n")
+
+        # 1. Parse Category from Code
+        # Assumes format "Category: Code". If no colon, keeps original text.
+        df["_category_temp"] = (
+            df["code"].astype(str).apply(lambda x: x.split(":")[0].strip())
+        )
+
+        # 2. Re-Group Data by (Participant, Text, Category)
+        # We take the MAX of the coder columns.
+        # Example:
+        # Row 1: Code "A:1", Coder1=1, Coder2=0
+        # Row 2: Code "A:2", Coder1=0, Coder2=1
+        # Result Group "A": Coder1=1, Coder2=1 -> Agreement!
+
+        # Preserve 'TN' if it exists
+        agg_dict = {c: "max" for c in coder_cols}
+        if "TN" in df.columns:
+            agg_dict["TN"] = "max"
+
+        # We must keep 'text' to distinguish segments
+        df_grouped = df.groupby(["p", "text", "_category_temp"], as_index=False).agg(
+            agg_dict
+        )
+
+        # 3. Replace the 'code' column with the category for the rest of the script
+        df_grouped["code"] = df_grouped["_category_temp"]
+        df_grouped.drop(columns=["_category_temp"], inplace=True)
+
+        # Replace main df
+        df = df_grouped
+        print(f"   -> Data grouped by Category. Rows reduced to: {len(df)}")
+
     # We must check for TNs here, because Strijbos filters (Method A/B) might drop them later.
     estimated_tn = 0
     tn_source = "None"
@@ -677,15 +720,15 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
     report.append(f"\nMETHODOLOGY USED: {method}")
     if method == "METHOD_A":
         report.append(
-            "Description: Strict Agreement (Intersection). We ignored cases where one coder missed the text."
+            "Description: (Intersection) True Negatives = ignored, and coded MATCHING segments = agreement or disagreement. We ignored cases where one coder missed a segment (Omissions)."
         )
     elif method == "METHOD_B":
         report.append(
-            "Description: Signal Detection (Union). We counted Omissions (Silence vs Code) as Disagreements."
+            "Description: (Union) True Negatives = ignored, and EVERY coded segment is counted as either agreement or disagreement."
         )
     elif method == "METHOD_C":
         report.append(
-            "Description: Timeline Accuracy (Full). We included the silence where both did nothing."
+            "Description: (Full) True Negatives = agreements, and EVERY coded segment is counted as either agreement or disagreement."
         )
 
     report.append("\n1. DATASET SUMMARY")

@@ -224,6 +224,10 @@ def process_irr_data(irr_filename):
                 reporting_status = "AGREE"
                 include_in_charts = True
                 is_chart_agreement = True
+            elif all_agree_raw == 2:
+                reporting_status = "PARTIAL_AGREE"
+                include_in_charts = True
+                is_chart_agreement = True
             else:
                 reporting_status = "DISAGREE"
                 include_in_charts = True
@@ -231,7 +235,15 @@ def process_irr_data(irr_filename):
 
         # Case 3: Omission / Partial (Some coded, some didn't) - e.g., 1 vs 0
         else:
-            if method == "METHOD_A":
+            # 1. First, check if this is a "Weighted Agreement" (Mode 2).
+            # If yes, we MUST count it, regardless of the Method selected below.
+            # This effectively overrides Method A's desire to delete "1 vs 0" rows.
+            if all_agree_raw == 2:
+                reporting_status = "PARTIAL_AGREE"
+                include_in_charts = True
+                is_chart_agreement = True
+            # 2. If it's NOT a Weighted Agreement, apply the standard Method logic.
+            elif method == "METHOD_A":
                 # Method A (Intersection):
                 # Normally filters out omissions. BUT, we must check if it's a CONFLICT.
                 # A Conflict is when Coder A coded 'X' and Coder B coded 'Y' on same text.

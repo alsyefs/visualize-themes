@@ -96,10 +96,29 @@ CALCULATE_SCORES_ON_MUTUAL_SEGMENTS_ONLY = False  # (Defualt: False)
 # METHOD_A : Mutual Agreement (Intersection). Excludes 0-0 and 1-0/0-1 mismatches (Strict).
 # METHOD_B : Union Agreement. Includes 1-0/0-1 disagreements. Excludes 0-0 (Silence).
 # METHOD_C : Full Master List. Includes 0-0 (Silence) as Agreement. (Requires Phase 2 to work).
-# STRIJBOS_METHOD = "METHOD_A"
+STRIJBOS_METHOD = "METHOD_A"
 # STRIJBOS_METHOD = "METHOD_B"
-STRIJBOS_METHOD = "METHOD_C"
+# STRIJBOS_METHOD = "METHOD_C"
+# ==============================================================================
+# AGREEMENT CALCULATION MODE
+# ==============================================================================
+# Determines how agreement is defined for statistics and the visual report.
+# 1 = STANDARD (Exact Match):
+#     Coders must select the exact same Code ID (e.g., "Emotions: Joy" vs "Emotions: Joy").
+#     "Emotions: Joy" vs "Emotions: Happy" is a DISAGREEMENT.
+#
+# 2 = WEIGHTED (Category/Hierarchy Match):
+#     Coders must select the same Category (e.g., "Emotions").
+#     "Emotions: Joy" vs "Emotions: Happy" is a PARTIAL AGREEMENT (Counted as agreement for Kappa/F1).
+#     Visuals will show a "Partial Agreement" icon for these items.
+#
+# Any other value will default to 1 (Standard).
+AGREEMENT_CALCULATION_MODE = 2
 
+# ==============================================================================
+# Reference: Methodological issues in developing a multi-dimensional coding procedure for small-group chat communication
+# ==============================================================================
+# Citation:
 # Title: "Methodological issues in developing a multi-dimensional coding procedure for small-group chat communication"
 # Author: Jan Willem Strijbos, Gerry Stahl
 # Journal: International Journal of Human-Computer Studies, Volume 65, Issue 7, July 2007, Pages 582-591

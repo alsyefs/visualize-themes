@@ -283,11 +283,7 @@ def calculate_agreement(input_file: str, output_file: str):
     if "_tokens" in df.columns:
         df.drop(columns=["_tokens"], inplace=True)
 
-    # Phase 3: Initialize/Update Agreement Columns (REMOVED)
-    # The user requested to remove _agreement columns.
-    agreement_cols = []
-
-    # Phase 4: Calculate Overall Agreement
+    # Phase 3: Calculate Overall Agreement
     print("Calculating overall 'all_agree' column...")
 
     num_coders = len(coders)
@@ -295,9 +291,56 @@ def calculate_agreement(input_file: str, output_file: str):
     # Use coders list directly, not agreement_cols
     sums = df[coders].sum(axis=1)
 
-    # Mark as agreed if ALL coders matched (sum == num_coders)
-    # User Request: If sums == 0, TN=1 and all_agree=0
+    # 1. Standard Exact Agreement (all_agree = 1)
     df["all_agree"] = (sums == num_coders).astype(int)
+
+    # 2. Weighted/Partial Agreement Logic (all_agree = 2)
+    calc_mode = getattr(config, "AGREEMENT_CALCULATION_MODE", 1)
+    if str(calc_mode) == "2":
+        print("   -> Checking for PARTIAL (Category-level) Agreements...")
+
+        # Extract Category (Assumes "Category: Code")
+        df["_cat_temp"] = (
+            df["code"].astype(str).apply(lambda x: x.split(":")[0].strip())
+        )
+
+        # Logic:
+        # For a given (Participant + Text + Category),
+        # did Coder A mark ANY code in this category AND Coder B mark ANY code in this category?
+
+        # Create a mask of "Presence" per coder per category group
+        # We group by P + Text + Category
+        # transform('max') broadcasts the group-level maximum back to the original rows
+        group_cols = ["p", "text", "_cat_temp"]
+
+        # Determine if each coder is "active" in this category group
+        for coder in coders:
+            df[f"_has_{coder}_in_cat"] = df.groupby(group_cols)[coder].transform("max")
+
+        # Sum the presence flags. If Sum == Num_Coders, it's a Category Match
+        cat_presence_cols = [f"_has_{c}_in_cat" for c in coders]
+        cat_agreement_sum = df[cat_presence_cols].sum(axis=1)
+
+        # Mark as Partial (2) IF:
+        # 1. It is NOT already an exact agreement (all_agree == 0)
+        # 2. Everyone agreed on the Category (cat_agreement_sum == num_coders)
+        # 3. It is NOT a True Negative (TN == 0)
+        partial_mask = (
+            (df["all_agree"] == 0)
+            & (cat_agreement_sum == num_coders)
+            & (df.get("TN", 0) == 0)
+        )
+
+        count_partials = partial_mask.sum()
+        if count_partials > 0:
+            print(
+                f"   -> Found {count_partials} rows with Partial (Category) Agreement."
+            )
+            df.loc[partial_mask, "all_agree"] = 2
+
+        # Cleanup temp columns
+        drop_cols = ["_cat_temp"] + cat_presence_cols
+        df.drop(columns=drop_cols, inplace=True)
 
     # Update TN based on sums (re-enforce consistency)
     df.loc[sums == 0, "TN"] = 1

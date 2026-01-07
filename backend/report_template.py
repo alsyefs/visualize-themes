@@ -13,6 +13,20 @@ def get_dynamic_faq(config):
     margin_pct = getattr(config, "TRANSCRIPT_NON_CODABLE_MARGIN", 0.10) * 100
     strijbos_method = getattr(config, "STRIJBOS_METHOD", "METHOD_C")
 
+    calc_mode = getattr(config, "AGREEMENT_CALCULATION_MODE", 1)
+    mode_text = "Standard (Exact Match)"
+    if str(calc_mode) == "2":
+        mode_text = "Weighted (Category Match)"
+
+    faq_items.append(
+        {
+            "q": "What Agreement Mode is active?",
+            "a": (
+                f"Current Mode: <strong>{mode_text}</strong>.<br>"
+                "If 'Weighted', disagreements on specific codes are counted as Agreements if they belong to the same Category."
+            ),
+        }
+    )
     # ==============================================================================
     # SECTION 1: DATA PROCESSING & MERGING
     # ==============================================================================
@@ -180,6 +194,7 @@ def render_dashboard_html(context):
         .status-icon { float: right; font-size: 1.2em; }
         .status-agree { color: var(--success); }
         .status-disagree { color: var(--danger); }
+        .status-partial { color: #ffc107; font-weight: bold; } /* Yellow for Partial */
         .status-ignored { color: #888; opacity: 0.6; } 
         .status-tn { color: #6c757d; font-style: italic; }
         .coder-tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-right: 5px; color: #fff; font-weight: bold; }
@@ -378,6 +393,7 @@ def render_dashboard_html(context):
                 <strong>Filter: </strong>
                 <button class="btn btn-sm btn-secondary" onclick="renderTable('all')">All Rows</button>
                 <button class="btn btn-sm btn-success" onclick="renderTable('agree')">Agreements</button>
+                <button class="btn btn-sm btn-warning" onclick="renderTable('partial')" style="color:#000;">Partial Agreements</button>
                 <button class="btn btn-sm btn-danger" onclick="renderTable('disagree')">Disagreements</button>
                 <button class="btn btn-sm btn-warning" onclick="renderTable('omission')" style="color:#000;">Omissions (ignored)</button>
                 <button class="btn btn-sm" style="background:#6c757d; color:white;" onclick="renderTable('tn')">True Negatives</button>
@@ -512,6 +528,7 @@ def render_dashboard_html(context):
         // Define the specific buckets for the Master List
         const masterBuckets = {
             "Agreements": [],
+            "Partial Agreements": [],
             "Disagreements": [],
             "Omissions": [],
             "True Negatives": []
@@ -560,6 +577,8 @@ def render_dashboard_html(context):
             
             if (st === 'AGREE') {
                 masterBuckets["Agreements"].push(segmentObj);
+            } else if (st === 'PARTIAL_AGREE') {
+                masterBuckets["Partial Agreements"].push(segmentObj);
             } else if (st === 'DISAGREE') {
                 masterBuckets["Disagreements"].push(segmentObj);
             } else if (st === 'IGNORED_OMISSION') {
@@ -571,7 +590,6 @@ def render_dashboard_html(context):
 
         // Assign the buckets to the hierarchy
         newHierarchy["Master List"] = masterBuckets;
-
         DATA.hierarchical = newHierarchy;
     }
 
@@ -735,12 +753,12 @@ def render_dashboard_html(context):
                 item.segments.forEach(seg => { 
                     totalSegs++; // Count ALL visible segments for the UI label
                     
-                    // EDIT: Strictly follow the Reporting Status. 
+                    // Strictly follow the Reporting Status. 
                     // If status is 'IGNORED_TN' or 'IGNORED_OMISSION', it must NOT contribute to statsTotal.
                     // This ensures Method A/B calculations are correct in the UI.
-                    if (seg.reporting_status === 'AGREE' || seg.reporting_status === 'DISAGREE' || seg.reporting_status === 'TRUE_NEGATIVE') {
+                    if (seg.reporting_status === 'AGREE' || seg.reporting_status === 'PARTIAL_AGREE' || seg.reporting_status === 'DISAGREE' || seg.reporting_status === 'TRUE_NEGATIVE') {
                         statsTotal++;
-                        if(seg.reporting_status === 'AGREE' || seg.reporting_status === 'TRUE_NEGATIVE') totalAgree++; 
+                        if(seg.reporting_status === 'AGREE' || seg.reporting_status === 'PARTIAL_AGREE' || seg.reporting_status === 'TRUE_NEGATIVE') totalAgree++; 
                     }
                 });
             });
@@ -780,9 +798,9 @@ def render_dashboard_html(context):
                         displayTotal++; // Count ALL visible segments
                         
                         // EDIT: Same fix for Code-level headers. Exclude ignored types from percentages.
-                        if (seg.reporting_status === 'AGREE' || seg.reporting_status === 'DISAGREE' || seg.reporting_status === 'TRUE_NEGATIVE') {
+                        if (seg.reporting_status === 'AGREE' ||  seg.reporting_status === 'PARTIAL_AGREE' || seg.reporting_status === 'DISAGREE' || seg.reporting_status === 'TRUE_NEGATIVE') {
                         statsTotal++;
-                        if(seg.reporting_status === 'AGREE' || seg.reporting_status === 'TRUE_NEGATIVE') agreeCount++; 
+                        if(seg.reporting_status === 'AGREE' || seg.reporting_status === 'PARTIAL_AGREE' || seg.reporting_status === 'TRUE_NEGATIVE') agreeCount++; 
                     }
                 });
                 const disagreeCount = statsTotal - agreeCount;
@@ -815,6 +833,8 @@ def render_dashboard_html(context):
                     // Logic: Green (success) for accepted/agreement, Red (danger) for disagreement
                     if (st === 'AGREE') {
                         statusHtml = '<span class="status-icon status-agree">&#10003;</span>'; // Check
+                    } else if (st === 'PARTIAL_AGREE') {
+                        statusHtml = '<span class="status-icon status-partial" title="Partial Agreement (Category Match)">~ &#10003;</span>';
                     } else if (st === 'DISAGREE') {
                         statusHtml = '<span class="status-icon status-disagree">&#10007;</span>'; // X
                     } else if (st === 'TRUE_NEGATIVE') {
@@ -1039,8 +1059,11 @@ def render_dashboard_html(context):
         let rawData = [...DATA.irrRecords];
 
         if (filterType === 'agree') {
-            rawData = rawData.filter(r => r.reporting_status === 'AGREE');
-        } 
+            rawData = rawData.filter(r => r.reporting_status === 'AGREE' || r.reporting_status === 'PARTIAL_AGREE');
+        }
+        else if (filterType === 'partial') {
+            rawData = rawData.filter(r => r.reporting_status === 'PARTIAL_AGREE');
+        }
         else if (filterType === 'disagree') {
             rawData = rawData.filter(r => r.reporting_status === 'DISAGREE');
         } 
@@ -1084,6 +1107,7 @@ def render_dashboard_html(context):
             const st = item.reporting_status;
             
             if (st === 'AGREE') statusIcon = '<span class="status-agree">✔</span>';
+            else if (st === 'PARTIAL_AGREE') statusIcon = '<span class="status-partial">~✔</span>';
             else if (st === 'DISAGREE') statusIcon = '<span class="status-disagree">✘</span>';
             else if (st === 'IGNORED_OMISSION') statusIcon = '<span style="color:var(--text-color); font-weight:bold; font-size:1.2em;">&ominus;</span>';
             else if (st === 'TRUE_NEGATIVE') {
