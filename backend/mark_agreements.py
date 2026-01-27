@@ -65,6 +65,13 @@ def calculate_agreement(input_file: str, output_file: str):
 
     df["_tokens"] = df["text"].apply(get_tokens)
 
+    # Initialize Label Columns to store specific codes per coder
+    for coder in coders:
+        # If coder has a 1, store the 'code'. Else store None.
+        df[f"{coder}_label"] = df.apply(
+            lambda x: x["code"] if x[coder] == 1 else None, axis=1
+        )
+
     # Align Text Across Codes (Optional)
     if config.ALIGN_SEGMENTS_ACROSS_CODES:
         print(
@@ -112,6 +119,19 @@ def calculate_agreement(input_file: str, output_file: str):
                         df.at[idx2, "text"] = stitched
                         df.at[idx2, "_tokens"] = new_tokens
 
+                    # This caused an extra label for a coder to be added incorrectly!
+                    # # Merge labels (Pull labels from idx2 into idx1 if idx1 is empty)
+                    # # This ensures idx1 becomes the "master" row with both coders' labels
+                    # for coder in coders:
+                    #     if pd.isna(df.loc[idx1, f"{coder}_label"]) and not pd.isna(
+                    #         df.loc[idx2, f"{coder}_label"]
+                    #     ):
+                    #         df.at[idx1, f"{coder}_label"] = df.loc[
+                    #             idx2, f"{coder}_label"
+                    #         ]
+                    #         # Also mark the binary flag
+                    #         df.at[idx1, coder] = 1
+
     # Phase 2: Calculate Subtext Agreement (Fuzzy Match) & MERGE ROWS
     print("Calculating agreement based on token overlap (fuzzy matching)...")
     grouped = df.groupby(["p", "code"])
@@ -153,10 +173,15 @@ def calculate_agreement(input_file: str, output_file: str):
                 # 3. Re-calculate tokens for idx1 so it can match others later
                 df.at[idx1, "_tokens"] = get_tokens(new_stitched_text)
 
-                # 4. Merge Coders (as before)
+                # 4. Merge Coders
                 for coder in coders:
                     if df.loc[idx2, coder] == 1:
                         df.loc[idx1, coder] = 1
+                        # Carry over the label string
+                        if pd.isna(df.loc[idx1, f"{coder}_label"]):
+                            df.at[idx1, f"{coder}_label"] = df.loc[
+                                idx2, f"{coder}_label"
+                            ]
 
                 # Merge TN status
                 # If one row was valid code (TN=0) and one was noise/TN (TN=1), the result is valid code (TN=0)
@@ -164,7 +189,7 @@ def calculate_agreement(input_file: str, output_file: str):
                 if df.loc[idx1, "TN"] == 0 or df.loc[idx2, "TN"] == 0:
                     df.loc[idx1, "TN"] = 0
 
-                # 5. Merge Memos (as before)
+                # 5. Merge Memos
                 memo1 = str(df.loc[idx1, "memo"])
                 memo2 = str(df.loc[idx2, "memo"])
                 if memo2 and memo2.strip() and memo2 not in memo1:
@@ -458,8 +483,9 @@ def calculate_agreement(input_file: str, output_file: str):
     # Added "TN" to base_cols so it is written to the final CSV
     base_cols = ["id", "p", "text", "code", "memo"]
 
-    # Ensure 'ignored' is the very last column
-    final_cols = base_cols + coders + ["all_agree", "TN", "ignored"]
+    # Include the label columns in the output CSV
+    label_cols = [f"{c}_label" for c in coders]
+    final_cols = base_cols + coders + label_cols + ["all_agree", "TN", "ignored"]
 
     cols_to_save = [c for c in final_cols if c in df.columns]
     df = df[cols_to_save]

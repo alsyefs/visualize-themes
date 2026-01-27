@@ -75,7 +75,7 @@ TRANSCRIPT_NON_CODABLE_MARGIN = 0.00
 # Result: Both become "Hello World" so they can be compared as the same segment.
 # If a Coder A codes a paragraph and Coder B codes just one sentence of it,
 # this forces them to be treated as the same segment so their codes can be compared.
-ALIGN_SEGMENTS_ACROSS_CODES = False  # (Default: False)
+ALIGN_SEGMENTS_ACROSS_CODES = True  # (Default: False)
 
 # 2. FILTERING (The "Ignore Silence" Rule)
 # If True, filters the dataset to only include text segments that were identified (coded)
@@ -84,7 +84,7 @@ ALIGN_SEGMENTS_ACROSS_CODES = False  # (Default: False)
 # Set to True to follow the instruction: "If one coder ignores a code, just ignore it."
 # This calculates agreement ONLY on segments where BOTH coders marked something.
 # It removes cases where one person coded a segment and the other missed it completely.
-CALCULATE_SCORES_ON_MUTUAL_SEGMENTS_ONLY = False  # (Defualt: False)
+CALCULATE_SCORES_ON_MUTUAL_SEGMENTS_ONLY = False  # (Default: False)
 # WARNING: If STRIJBOS_METHOD is set to 'METHOD_C' (Full List), you likely want
 # 'CALCULATE_SCORES_ON_MUTUAL_SEGMENTS_ONLY' set to FALSE so that 1-0 disagreements are not filtered out.
 # If set to True, it might override Strijbos settings by removing "Omissions".
@@ -113,7 +113,7 @@ STRIJBOS_METHOD = "METHOD_A"
 #     Visuals will show a "Partial Agreement" icon for these items.
 #
 # Any other value will default to 1 (Standard).
-AGREEMENT_CALCULATION_MODE = 2
+AGREEMENT_CALCULATION_MODE = 1  # (Default: 1)
 
 # ==============================================================================
 # Reference: Methodological issues in developing a multi-dimensional coding procedure for small-group chat communication

@@ -3,9 +3,9 @@ import csv
 import os
 
 # Global variables for input and output filenames
-INPUT_FILENAME = "notes/Merged_codebook1to6 - updated_merge.csv"
-OUTPUT_FILENAME = "output/fixed_merged_codebook.csv"
-IRR_DATA_FILENAME = "input/merged_irr_data_p01_to_p06.csv"
+INPUT_FILENAME = "path/to/your/input_file.csv"
+OUTPUT_FILENAME = "path/to/your/output_file.csv"
+IRR_DATA_FILENAME = "path/to/your/merged_irr_data.csv"
 
 
 def fix_csv():

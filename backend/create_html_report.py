@@ -140,7 +140,10 @@ def process_irr_data(irr_filename):
     coders = [
         c
         for c in df.columns
-        if c not in base_cols and not c.endswith("_agreement") and not c.startswith("_")
+        if c not in base_cols
+        and not c.endswith("_agreement")
+        and not c.startswith("_")
+        and not c.endswith("_label")
     ]
 
     agreement_map = {}

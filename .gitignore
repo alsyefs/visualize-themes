@@ -1,7 +1,10 @@
 code/
 codebook_definitions/*
 !codebook_definitions/.gitkeep
-notes/
+codetexts/*
+!codetexts/.gitkeep
+diagrams/*
+!diagrams/.gitkeep
 input/*
 !input/.gitkeep
 irr_input/*
@@ -13,8 +16,7 @@ transcripts/*
 !transcripts/.gitkeep
 secret.py
 .env
-codetexts/*
-!codetexts/.gitkeep
+notes/
 
 # Ignore Python bytecode files
 __pycache__/
@@ -22,7 +24,10 @@ __pycache__/
 
 backend/codebook_definitions/*
 !backend/codebook_definitions/.gitkeep
-backend/notes/
+backend/codetexts/*
+!backend/codetexts/.gitkeep
+backend/diagrams/*
+!backend/diagrams/.gitkeep
 backend/input/*
 !backend/input/.gitkeep
 backend/irr_input/*
@@ -34,5 +39,4 @@ backend/transcripts/*
 !backend/transcripts/.gitkeep
 backend/secret.py
 backend/.env
-backend/codetexts/*
-!backend/codetexts/.gitkeep
+backend/notes/

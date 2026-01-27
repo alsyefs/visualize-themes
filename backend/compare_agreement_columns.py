@@ -7,7 +7,9 @@ import sys
 import os
 import backend.config as config
 import warnings
+from collections import Counter
 from sklearn.metrics import cohen_kappa_score, f1_score
+from sklearn.preprocessing import LabelEncoder
 
 OUTPUT_DIRECTORY = config.OUTPUT_DIRECTORY
 OUTPUT_FILENAME = config.OUTPUT_FILENAME
@@ -130,149 +132,281 @@ def calculate_per_code_metrics(df, coder_cols):
 
 
 def generate_math_section(
-    df, coder_cols, f1_score_val, kappa_score_val, tn_count, alpha_val=None
+    df,
+    coder_cols,
+    f1_score_val,
+    kappa_score_val,
+    tn_count,
+    alpha_val=None,
+    is_multi_class=False,
+    label_cols=None,
 ):
     """
-    Generates a text block that breaks down the math step-by-step
-    using the actual data from the dataframe.
+    Generates a text block that breaks down the math.
+    Handles both Binary (1/0) and Multi-Class (Label A/Label B) logic.
     """
-    c1, c2 = coder_cols[0], coder_cols[1]
-
-    # 1. Extract Raw Counts (The Confusion Matrix components)
-    tp = len(df[(df[c1] == 1) & (df[c2] == 1)])
-    fp = len(df[(df[c1] == 1) & (df[c2] == 0)])
-    fn = len(df[(df[c1] == 0) & (df[c2] == 1)])
-    tn = int(tn_count)
-
-    total_analyzed = tp + fp + fn
-    total_universe = total_analyzed + tn
-    disagreements = fp + fn
-
     lines = []
     lines.append("\n3. TRANSPARENCY & CALCULATIONS (SHOWING THE MATH)")
     lines.append("-" * 60)
     lines.append("To ensure transparency, here are the exact numbers used to")
     lines.append("calculate the scores above.")
     lines.append("")
-    lines.append(f"A. RAW COUNTS (Confusion Matrix)")
-    lines.append(f"   (1) Mutual Agreements (Both=1) : {tp}")
-    lines.append(f"   (2) Coder '{c1}' Only (1-0)    : {fp}")
-    lines.append(f"   (3) Coder '{c2}' Only (0-1)    : {fn}")
-    lines.append(f"   (4) True Negatives (Both=0)    : {tn} (Virtual/Derived)")
-    lines.append(f"   ----------------------------------------")
-    lines.append(f"   Active Segments (TP+FP+FN)     : {total_analyzed}")
-    lines.append(f"   Total Universe (u)             : {total_universe}")
-    lines.append("")
 
-    # F1 MATH
-    f1_calc = (2 * tp) / ((2 * tp) + fp + fn) if ((2 * tp) + fp + fn) > 0 else 0
-    lines.append("B. F1-SCORE CALCULATION")
-    lines.append("   Formula: 2 * Mutual / (2 * Mutual + Disagreements)")
-    lines.append(f"   Step 1 : 2 * {tp} = {2 * tp}")
-    lines.append(f"   Step 2 : {2 * tp} + {fp} + {fn} = {(2 * tp) + fp + fn}")
-    lines.append(f"   Step 3 : {2 * tp} / {(2 * tp) + fp + fn} = {f1_calc:.4f}")
-    lines.append(f"   Result : {f1_score_val:.4f}")
-    lines.append("")
+    if is_multi_class and label_cols:
+        c1_col, c2_col = label_cols[0], label_cols[1]
 
-    # KAPPA MATH
-    agreements = tp + tn
-    po = agreements / total_universe if total_universe > 0 else 0
+        # Filter out 'No Code' for calculation if desired, or keep them.
+        # For Kappa, we usually keep them if they are relevant to the Method.
+        # Here we use the dataframe passed in (which is already filtered by Method).
 
-    p_c1_yes = (tp + fp) / total_universe
-    p_c1_no = (tn + fn) / total_universe
-    p_c2_yes = (tp + fn) / total_universe
-    p_c2_no = (tn + fp) / total_universe
+        # 1. Raw Counts
+        # Calculate Agreements vs Disagreements on LABELS
+        agreements = len(df[df[c1_col] == df[c2_col]])
+        disagreements = len(df) - agreements
+        total_analyzed = len(df)
 
-    pe = (p_c1_yes * p_c2_yes) + (p_c1_no * p_c2_no)
+        lines.append(f"A. RAW COUNTS (Multi-Class Confusion)")
+        lines.append(
+            f"   Mode: Comparing specific labels (e.g. '{df[c1_col].iloc[0] if len(df)>0 else 'A'}' vs '{df[c2_col].iloc[0] if len(df)>0 else 'B'}')"
+        )
+        lines.append(f"   (1) Agreements (Same Label)    : {agreements}")
+        lines.append(f"   (2) Disagreements (Diff Label) : {disagreements}")
+        lines.append(f"   ----------------------------------------")
+        lines.append(f"   Total Analyzed Segments        : {total_analyzed}")
+        lines.append("")
 
-    # Calculate intermediate products for display
-    pe_yes = p_c1_yes * p_c2_yes
-    pe_no = p_c1_no * p_c2_no
+        lines.append("B. F1-SCORE CALCULATION")
+        lines.append("   (Calculated as weighted average of per-label F1 scores)")
+        lines.append(f"   Result : {f1_score_val:.4f}")
+        lines.append("")
 
-    kappa_calc = (po - pe) / (1 - pe) if (1 - pe) != 0 else 0
+        # 2. Kappa Math
+        lines.append("C. COHEN'S KAPPA CALCULATION")
+        lines.append("   Formula: (Po - Pe) / (1 - Pe)")
 
-    lines.append("C. COHEN'S KAPPA CALCULATION")
-    lines.append("   Formula: (Po - Pe) / (1 - Pe)")
-    lines.append("")
-    lines.append("   Step 1: Observed Agreement (Po)")
-    lines.append(
-        f"       Agreements = Mutual ({tp}) + True Negatives ({tn}) = {agreements}"
-    )
-    lines.append(f"       Po = {agreements} / {total_universe} = {po:.4f}")
-    lines.append("")
-    lines.append("   Step 2: Expected Agreement by Chance (Pe)")
-    lines.append("       Marginals (Total frequency of codes):")
-    lines.append(
-        f"         - Coder '{c1}' Yes: {tp+fp} ({p_c1_yes:.4f}) | No: {tn+fn} ({p_c1_no:.4f})"
-    )
-    lines.append(
-        f"         - Coder '{c2}' Yes: {tp+fn} ({p_c2_yes:.4f}) | No: {tn+fp} ({p_c2_no:.4f})"
-    )
-    lines.append("")
-    lines.append("       Probability of Random Agreement:")
-    lines.append(f"       Pe = (P_c1_yes * P_c2_yes) + (P_c1_no * P_c2_no)")
-    lines.append(
-        f"       Pe = ({p_c1_yes:.4f} * {p_c2_yes:.4f}) + ({p_c1_no:.4f} * {p_c2_no:.4f})"
-    )
-    lines.append(f"       Pe = {pe_yes:.4f} + {pe_no:.4f} = {pe:.4f}")
-    lines.append("")
-    lines.append("   Step 3: Final Kappa Score")
-    if (1 - pe) != 0:
-        lines.append(f"       k = ({po:.4f} - {pe:.4f}) / (1 - {pe:.4f})")
-        lines.append(f"       k = {po-pe:.4f} / {1-pe:.4f} = {kappa_score_val:.4f}")
+        # Step 1: Po
+        po = agreements / total_analyzed if total_analyzed > 0 else 0
+        lines.append("")
+        lines.append("   Step 1: Observed Agreement (Po)")
+        lines.append(
+            f"       Po = Agreements / Total = {agreements} / {total_analyzed} = {po:.4f}"
+        )
+
+        # Step 2: Pe
+        # Get all unique labels across both columns
+        # Ensure we convert to string and handle potential NaNs before creating the set
+        all_labels = set(df[c1_col].fillna("No Code").astype(str).unique()) | set(
+            df[c2_col].fillna("No Code").astype(str).unique()
+        )
+        all_labels = sorted(list(all_labels))
+
+        lines.append("")
+        lines.append("   Step 2: Expected Agreement by Chance (Pe)")
+        lines.append("       Marginals (Frequency of each label):")
+
+        pe_sum = 0
+
+        # Header for marginals table
+        # lines.append(
+        #     f"       {'Label':<20} | {'Coder 1':<10} | {'Coder 2':<10} | {'Probability Product'}"
+        # )
+        # lines.append(f"       {'-'*20} | {'-'*10} | {'-'*10} | {'-'*19}")
+
+        c1_counts = Counter(df[c1_col].astype(str))
+        c2_counts = Counter(df[c2_col].astype(str))
+
+        for label in all_labels:
+            n1 = c1_counts.get(label, 0)
+            n2 = c2_counts.get(label, 0)
+            p1 = n1 / total_analyzed if total_analyzed > 0 else 0
+            p2 = n2 / total_analyzed if total_analyzed > 0 else 0
+            prod = p1 * p2
+            pe_sum += prod
+
+        #     # Truncate label if too long
+        #     disp_label = (label[:17] + "..") if len(label) > 19 else label
+        #     lines.append(
+        #         f"       {disp_label:<20} | {n1:<10} | {n2:<10} | ({p1:.3f} * {p2:.3f}) = {prod:.4f}"
+        #     )
+
+        lines.append("")
+        lines.append(f"       Pe (Sum of products) = {pe_sum:.4f}")
+
+        # Step 3: Result
+        lines.append("")
+        lines.append("   Step 3: Final Kappa Score")
+        if (1 - pe_sum) != 0:
+            k_calc = (po - pe_sum) / (1 - pe_sum)
+            lines.append(f"       k = ({po:.4f} - {pe_sum:.4f}) / (1 - {pe_sum:.4f})")
+            lines.append(f"       k = {po-pe_sum:.4f} / {1-pe_sum:.4f} = {k_calc:.4f}")
+        else:
+            lines.append(f"       k = Undefined (Pe=1, Perfect Chance Agreement)")
+
+        lines.append(f"       Result : {kappa_score_val:.4f}")
+        lines.append("")
+
     else:
-        lines.append(f"       k = Undefined (Pe=1)")
-    lines.append(f"       Result : {kappa_score_val:.4f}")
-    lines.append("")
+        # BINARY LOGIC (Legacy)
+        c1, c2 = coder_cols[0], coder_cols[1]
+        tp = len(df[(df[c1] == 1) & (df[c2] == 1)])
+        fp = len(df[(df[c1] == 1) & (df[c2] == 0)])
+        fn = len(df[(df[c1] == 0) & (df[c2] == 1)])
+        tn = int(tn_count)
+
+        total_analyzed = tp + fp + fn
+        total_universe = total_analyzed + tn
+        disagreements = fp + fn
+
+        lines.append(f"A. RAW COUNTS (Binary Confusion Matrix)")
+        lines.append(f"   (1) Mutual Agreements (Both=1) : {tp}")
+        lines.append(f"   (2) Coder '{c1}' Only (1-0)    : {fp}")
+        lines.append(f"   (3) Coder '{c2}' Only (0-1)    : {fn}")
+        lines.append(f"   (4) True Negatives (Both=0)    : {tn} (Virtual/Derived)")
+        lines.append(f"   ----------------------------------------")
+        lines.append(f"   Active Segments (TP+FP+FN)     : {total_analyzed}")
+        lines.append(f"   Total Universe (u)             : {total_universe}")
+        lines.append("")
+
+        # F1 MATH
+        f1_calc = (2 * tp) / ((2 * tp) + fp + fn) if ((2 * tp) + fp + fn) > 0 else 0
+        lines.append("B. F1-SCORE CALCULATION")
+        lines.append("   Formula: 2 * Mutual / (2 * Mutual + Disagreements)")
+        lines.append(f"   Step 1 : 2 * {tp} = {2 * tp}")
+        lines.append(f"   Step 2 : {2 * tp} + {fp} + {fn} = {(2 * tp) + fp + fn}")
+        lines.append(f"   Step 3 : {2 * tp} / {(2 * tp) + fp + fn} = {f1_calc:.4f}")
+        lines.append(f"   Result : {f1_score_val:.4f}")
+        lines.append("")
+
+        # KAPPA MATH
+        agreements = tp + tn
+        po = agreements / total_universe if total_universe > 0 else 0
+
+        p_c1_yes = (tp + fp) / total_universe
+        p_c1_no = (tn + fn) / total_universe
+        p_c2_yes = (tp + fn) / total_universe
+        p_c2_no = (tn + fp) / total_universe
+
+        pe = (p_c1_yes * p_c2_yes) + (p_c1_no * p_c2_no)
+        pe_yes = p_c1_yes * p_c2_yes
+        pe_no = p_c1_no * p_c2_no
+
+        lines.append("C. COHEN'S KAPPA CALCULATION")
+        lines.append("   Formula: (Po - Pe) / (1 - Pe)")
+        lines.append("")
+        lines.append("   Step 1: Observed Agreement (Po)")
+        lines.append(
+            f"       Agreements = Mutual ({tp}) + True Negatives ({tn}) = {agreements}"
+        )
+        lines.append(f"       Po = {agreements} / {total_universe} = {po:.4f}")
+        lines.append("")
+        lines.append("   Step 2: Expected Agreement by Chance (Pe)")
+        lines.append("       Marginals (Total frequency of codes):")
+        lines.append(
+            f"         - Coder '{c1}' Yes: {tp+fp} ({p_c1_yes:.4f}) | No: {tn+fn} ({p_c1_no:.4f})"
+        )
+        lines.append(
+            f"         - Coder '{c2}' Yes: {tp+fn} ({p_c2_yes:.4f}) | No: {tn+fp} ({p_c2_no:.4f})"
+        )
+        lines.append("")
+        lines.append("       Probability of Random Agreement:")
+        lines.append(f"       Pe = (P_c1_yes * P_c2_yes) + (P_c1_no * P_c2_no)")
+        lines.append(
+            f"       Pe = ({p_c1_yes:.4f} * {p_c2_yes:.4f}) + ({p_c1_no:.4f} * {p_c2_no:.4f})"
+        )
+        lines.append(f"       Pe = {pe_yes:.4f} + {pe_no:.4f} = {pe:.4f}")
+        lines.append("")
+        lines.append("   Step 3: Final Kappa Score")
+        if (1 - pe) != 0:
+            denom = 1 - pe
+            lines.append(f"       k = ({po:.4f} - {pe:.4f}) / (1 - {pe:.4f})")
+            lines.append(
+                f"       k = {po-pe:.4f} / {denom:.4f} = {kappa_score_val:.4f}"
+            )
+        else:
+            lines.append(f"       k = Undefined (Pe=1, Perfect Chance Agreement)")
+            lines.append(f"       Result : {kappa_score_val}")
+        lines.append("")
 
     # KRIPPENDORFF'S ALPHA MATH
-    # Logic for Binary Data with 2 Coders (Nominal Metric)
-    # Total Judgments (N) = 2 * Total Universe
-    N = 2 * total_universe
-
-    # Count of all '1's assigned by anyone
-    n1 = (2 * tp) + fp + fn
-    # Count of all '0's assigned by anyone
-    n0 = (2 * tn) + fp + fn
-
-    # Observed Disagreement (Do)
-    # For 2 coders, Do is simply the fraction of units with disagreement
-    do = disagreements / total_universe if total_universe > 0 else 0
-
-    # Expected Disagreement (De)
-    # De = (2 * n0 * n1) / (N * (N - 1))
-    numerator_de = 2 * n0 * n1
-    denominator_de = N * (N - 1) if N > 1 else 1
-    de = numerator_de / denominator_de
-
-    # Alpha = 1 - (Do / De)
-    calc_alpha = 1 - (do / de) if de > 0 else 0
-
     lines.append("D. KRIPPENDORFF'S ALPHA CALCULATION")
     lines.append("   Formula: 1 - (Do / De)")
     lines.append("   Note   : Uses sample-size correction (1 / N-1) unlike Kappa.")
+
+    # 1. Prepare Data Vectors
+    if is_multi_class and label_cols:
+        col_a, col_b = df[label_cols[0]], df[label_cols[1]]
+    else:
+        col_a, col_b = df[coder_cols[0]], df[coder_cols[1]]
+
+    # 2. Calculate N and Counts
+    # Flatten both columns to count frequencies of every label (0/1 or Text)
+    # Using simple Nominal logic (applicable to standard binary/nominal coding)
+    total_units = len(df)
+    num_coders = 2
+    N = total_units * num_coders
+
+    # Combine and count
+    all_values = pd.concat([col_a, col_b]).astype(str)
+    counts = Counter(all_values)
+
     lines.append("")
     lines.append("   Step 1: Count total judgments (N)")
-    lines.append(f"       N = 2 coders * {total_universe} segments = {N}")
-    lines.append(f"       Total '1's (n1) = {n1}")
-    lines.append(f"       Total '0's (n0) = {n0}")
+    lines.append(f"       N = {num_coders} coders * {total_units} segments = {N}")
+
+    # # Sort counts for consistent display
+    # for label, count in sorted(counts.items()):
+    #     # Truncate label if too long
+    #     lbl_display = (label[:15] + "..") if len(label) > 17 else label
+    #     lines.append(f"       Total '{lbl_display}' (n) = {count}")
+
+    # 3. Calculate Do (Observed Disagreement)
+    # For Nominal data, Do is simply the fraction of mismatches
+    disagreements_count = (col_a != col_b).sum()
+    do_val = disagreements_count / total_units if total_units > 0 else 0
+
     lines.append("")
     lines.append("   Step 2: Calculate Observed Disagreement (Do)")
     lines.append(f"       Do = Disagreements / Universe")
-    lines.append(f"       Do = {disagreements} / {total_universe} = {do:.4f}")
+    lines.append(f"       Do = {disagreements_count} / {total_units} = {do_val:.4f}")
+
+    # 4. Calculate De (Expected Disagreement)
+    # Formula for Nominal Metric: De = [Sum of nc * (N - nc)] / [N * (N - 1)]
+    # This is mathematically equivalent to the 2*n0*n1 / N(N-1) binary shortcut but works for any number of classes
+
+    numerator_sum = sum(c * (N - c) for c in counts.values())
+    denominator = N * (N - 1) if N > 1 else 1
+    de_val = numerator_sum / denominator
+
     lines.append("")
     lines.append("   Step 3: Calculate Expected Disagreement (De)")
-    lines.append("       De = (2 * n0 * n1) / (N * (N - 1))")
-    lines.append(f"       De = (2 * {n0} * {n1}) / ({N} * {N - 1})")
-    lines.append(f"       De = {numerator_de} / {denominator_de} = {de:.4f}")
+    if len(counts) == 2:
+        # Show specific binary formula if only 2 classes (easier to read)
+        keys = list(counts.keys())
+        lines.append(f"       De = (2 * n_{keys[0]} * n_{keys[1]}) / (N * (N - 1))")
+    else:
+        lines.append(f"       De = [Sum of n * (N - n)] / [N * (N - 1)]")
+
+    lines.append(f"       De = {numerator_sum} / {denominator} = {de_val:.4f}")
+
+    # 5. Final Calculation
     lines.append("")
     lines.append("   Step 4: Final Calculation")
-    lines.append(f"       Alpha = 1 - ({do:.4f} / {de:.4f})")
-    lines.append(f"       Alpha = 1 - {do/de:.4f} = {calc_alpha:.4f}")
 
-    if alpha_val is not None:
-        # Use calc_alpha here to ensure the Result matches the step-by-step math shown above
-        lines.append(f"       Result : {calc_alpha:.4f}")
+    final_alpha = alpha_val
+    if de_val != 0:
+        calc_alpha = 1 - (do_val / de_val)
+        lines.append(f"       Alpha = 1 - ({do_val:.4f} / {de_val:.4f})")
+        lines.append(f"       Alpha = 1 - {do_val/de_val:.4f} = {calc_alpha:.4f}")
+        # If we didn't have a pre-calculated alpha_val (from simpledorff), use this manual one
+        if final_alpha is None:
+            final_alpha = calc_alpha
+    else:
+        lines.append(f"       Alpha = Undefined (De=0, No Variance)")
+
+    lines.append(f"       Result : {final_alpha:.4f}")
+
+    if not is_multi_class and alpha_val is not None:
+        pass  # Already added result above
 
     lines.append("-" * 60)
 
@@ -360,12 +494,9 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
     has_injected_tns = "TN" in df.columns and df["TN"].sum() > 0
 
     if has_injected_tns:
-        # Capture the count from the full dataset
         estimated_tn = df["TN"].sum()
         tn_source = "Injected from Master List"
         print(f"   -> Found {estimated_tn} injected True Negatives in raw dataset.")
-
-        # Calculate prevalence based on the FULL dataset
         total_rows_raw = len(df)
         coded_rows_count_raw = len(df[df["TN"] == 0])
         prevalence_percentage = (coded_rows_count_raw / total_rows_raw) * 100
@@ -391,7 +522,6 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
         mask = pd.Series(True, index=df.index)
         for c in coder_cols:
             mask = mask & has_code_series[c]
-
         if "TN" in df.columns:
             mask = mask & (df["TN"] == 0)
         df = df[mask]
@@ -402,7 +532,6 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
         mask = pd.Series(False, index=df.index)
         for c in coder_cols:
             mask = mask | has_code_series[c]
-
         if "TN" in df.columns:
             mask = mask & (df["TN"] == 0)
         df = df[mask]
@@ -507,6 +636,11 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
     # Try to Calculate True Negatives from Transcripts:
     adjusted_kappa = None
 
+    # We only inject virtual TNs into the stats if the Method demands it.
+    # Method A (Intersection) and Method B (Union) usually EXCLUDE pure silence.
+    # Method C (Full) INCLUDES silence.
+    should_inject_virtual_tns = method == "METHOD_C"
+
     # Logic: If we found injected TNs earlier, use that count.
     # Otherwise, try to estimate from transcripts (Fallback for old CSVs).
 
@@ -516,7 +650,7 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
             f"   -> Using pre-calculated TN count: {estimated_tn} (Source: {tn_source})"
         )
 
-        # FIXED: Check if the current DataFrame *already* has these zeros (Method C)
+        # Check if the current DataFrame *already* has these zeros (Method C)
         # If the df has 0-0 rows, we should NOT add virtual zeros, or we will double-count them.
         current_tn_in_df = (df[coder_cols] == 0).all(axis=1).sum()
 
@@ -527,9 +661,11 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
             # We skip adjusted_kappa calculation here because 'kappa' calculated later
             # on 'df' will already include these True Negatives.
             adjusted_kappa = None
-        else:
-            # The DF was stripped of TNs (Method A/B), so we must inject them virtually
-            # to calculate the prevalence-adjusted Kappa correctly.
+        elif should_inject_virtual_tns:
+            # The DF was stripped of TNs (Method A/B), OR we are in Method C but they were stripped?
+            # Actually, if we are in Method C, they shouldn't have been stripped.
+            # This block mainly handles cases where we want to FORCE the stat to include TNs
+            # even if the DF doesn't have them.
             print("   -> Injecting virtual True Negatives for Kappa calculation.")
 
             zeros_df = pd.DataFrame(
@@ -550,6 +686,10 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
                 adjusted_kappa = cohen_kappa_score(combined_col1, combined_col2)
             except Exception:
                 adjusted_kappa = np.nan
+        else:
+            print(
+                f"   -> Method is '{method}', so we are IGNORING the {estimated_tn} True Negatives in the statistic."
+            )
 
     # Only run transcript estimation if we DO NOT have injected TNs
     else:
@@ -598,30 +738,38 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
                     estimated_tn = int(uncoded_words / avg_segment_len)
                     tn_source = "Estimated from Transcripts"
 
-                    # 4. Calculate Adjusted Kappa
-                    # Create a virtual dataset of zeros
-                    zeros_df = pd.DataFrame(
-                        {
-                            coder_cols[0]: [0] * estimated_tn,
-                            coder_cols[1]: [0] * estimated_tn,
-                        }
-                    )
-                    # Combine actual data + zeros
-                    combined_col1 = pd.concat(
-                        [df[coder_cols[0]], zeros_df[coder_cols[0]]], ignore_index=True
-                    )
-                    combined_col2 = pd.concat(
-                        [df[coder_cols[1]], zeros_df[coder_cols[1]]], ignore_index=True
-                    )
+                    # 4. Calculate Adjusted Kappa ONLY if Method C is active
+                    if should_inject_virtual_tns:
+                        # Create a virtual dataset of zeros
+                        zeros_df = pd.DataFrame(
+                            {
+                                coder_cols[0]: [0] * estimated_tn,
+                                coder_cols[1]: [0] * estimated_tn,
+                            }
+                        )
+                        # Combine actual data + zeros
+                        combined_col1 = pd.concat(
+                            [df[coder_cols[0]], zeros_df[coder_cols[0]]],
+                            ignore_index=True,
+                        )
+                        combined_col2 = pd.concat(
+                            [df[coder_cols[1]], zeros_df[coder_cols[1]]],
+                            ignore_index=True,
+                        )
 
-                    adjusted_kappa = cohen_kappa_score(combined_col1, combined_col2)
-                    # Calculate Prevalence %
-                    # (Rows that actually had data) / (Total Rows including Silence)
-                    total_virtual_rows = len(combined_col1)
-                    coded_rows_count = len(df)
-                    prevalence_percentage = (
-                        coded_rows_count / total_virtual_rows
-                    ) * 100
+                        adjusted_kappa = cohen_kappa_score(combined_col1, combined_col2)
+
+                        # Calculate Prevalence %
+                        # (Rows that actually had data) / (Total Rows including Silence)
+                        total_virtual_rows = len(combined_col1)
+                        coded_rows_count = len(df)
+                        prevalence_percentage = (
+                            coded_rows_count / total_virtual_rows
+                        ) * 100
+                    else:
+                        print(
+                            f"   -> Method is '{method}': Skipping virtual TN injection (Silence Ignored)."
+                        )
                 else:
                     print(
                         "Warning: Coded words > Source words or empty data. Cannot calc TNs."
@@ -638,15 +786,18 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
     # Check for True Negatives (rows where ALL coders have 0)
     true_negatives = (df[coder_cols] == 0).all(axis=1).sum()
 
-    if "TN" in df.columns:
-        # Trust the Injected TN sum we found earlier
-        if has_injected_tns:
+    # Only override with estimated_tn IF the current df actually contains TN rows
+    # (i.e. Method C), or if we specifically injected virtual TNs for stats.
+    # Method A/B filters them out, so true_negatives should remain 0 (or close to 0) for them.
+    if "TN" in df.columns and has_injected_tns:
+        # Check if the dataframe actually HAS the rows currently
+        current_zero_rows = (df[coder_cols] == 0).all(axis=1).sum()
+        if current_zero_rows > 0:
             true_negatives = estimated_tn
 
     has_missing_negatives = true_negatives == 0
     # If we didn't calculate prevalence via transcripts, but we have 0s in the CSV, calculate it here
     if prevalence_percentage is None and not has_missing_negatives and len(df) > 0:
-        # Prevalence = (Rows with at least one coding) / Total Rows
         rows_with_coding = (df[coder_cols].sum(axis=1) > 0).sum()
         prevalence_percentage = (rows_with_coding / len(df)) * 100
     if analyzed_segments == 0:
@@ -662,16 +813,86 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
         agreements = analyzed_segments
         agreement_percentage = 100.0
 
+    # Check Multi-Class Mode
+    # Check if we have Multi-Class Label columns
+    label_cols = [f"{c}_label" for c in coder_cols]
+    has_labels = all(col in df.columns for col in label_cols)
+
+    is_multi_class = False
+    mc_df = None
     # Cohen's Kappa (Only valid for exactly 2 coders)
     kappa = np.nan
+
     if len(coder_cols) == 2:
-        kappa = cohen_kappa_score(df[coder_cols[0]], df[coder_cols[1]])
-    elif len(coder_cols) > 2:
-        print(
-            f"Info: Skipping Cohen's Kappa (Requires exactly 2 coders, found {len(coder_cols)})."
-        )
-    else:
-        print("Info: Skipping Cohen's Kappa (Not enough coders).")
+        if has_labels:
+            print(
+                f"   -> Calculating MULTI-CLASS Kappa ({method}) using specific code labels."
+            )
+            is_multi_class = True
+
+            # Collapse sparse rows (where coders disagree on the code for the same text) into single rows
+            # Group by p + text. Take the first non-null label for each coder.
+            # This ensures that a 1-0 row and a 0-1 row become a single row with valid labels for both.
+            # We use 'first' because Phase 1.5 in mark_agreements ensures text is identical for fuzzy matches.
+            mc_df = df.groupby(["p", "text"], as_index=False).agg(
+                {
+                    label_cols[0]: "first",
+                    label_cols[1]: "first",
+                    coder_cols[0]: "max",
+                    coder_cols[1]: "max",
+                    "TN": "max",  # Preserve TN status if needed
+                }
+            )
+
+            # DYNAMIC FILTERING BASED ON METHOD (Multi-Class specific)
+            if method == "METHOD_A":
+                # Method A: Intersection (Exclude Omissions and TNs)
+                # Keep only rows where BOTH coders have a label
+                mc_df = mc_df.dropna(subset=label_cols)
+
+            elif method == "METHOD_B":
+                # Method B: Union
+                mask = (mc_df[coder_cols] == 1).any(axis=1)
+                mc_df = mc_df[mask].copy()
+                mc_df[label_cols] = mc_df[label_cols].fillna("No Code")
+
+            elif method == "METHOD_C":
+                # Method C: Full Universe
+                mc_df[label_cols] = mc_df[label_cols].fillna("No Code")
+
+            if len(mc_df) > 0:
+                le = LabelEncoder()
+                all_labels = (
+                    pd.concat([mc_df[label_cols[0]], mc_df[label_cols[1]]])
+                    .astype(str)
+                    .unique()
+                )
+                le.fit(all_labels)
+                encoded_c1 = le.transform(mc_df[label_cols[0]].astype(str))
+                encoded_c2 = le.transform(mc_df[label_cols[1]].astype(str))
+                kappa = cohen_kappa_score(encoded_c1, encoded_c2)
+
+                # IMPORTANT: Update analyzed segments to reflect the Multi-Class subset
+                analyzed_segments = len(mc_df)
+            else:
+                kappa = np.nan
+        else:
+            # Fallback to Binary Kappa
+            try:
+                kappa = cohen_kappa_score(df[coder_cols[0]], df[coder_cols[1]])
+            except:
+                kappa = np.nan
+
+    # EDGE CASE HANDLING: Perfect Agreement on Single Label
+    if pd.isna(kappa) and analyzed_segments > 0:
+        # Check if it's perfect agreement
+        # If Multi-Class
+        if is_multi_class and mc_df is not None:
+            if (mc_df[label_cols[0]] == mc_df[label_cols[1]]).all():
+                kappa = 1.0
+        # If Binary
+        elif (df[coder_cols[0]] == df[coder_cols[1]]).all():
+            kappa = 1.0
 
     # Calculate F1 Score (Pairwise average or binary if 2 coders)
     # If > 2 coders, this computes the average F1 of all pairs, or you can skip it.
@@ -679,34 +900,65 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
     f1 = np.nan
     if len(coder_cols) >= 2:
         f1 = f1_score(df[coder_cols[0]], df[coder_cols[1]], pos_label=1)
+        # Note: This is Binary F1 (Presence).
+        # If Multi-Class is active, we might want Weighted F1 on labels?
+        # Standard practice is often to report Binary F1 (Detection) + Multi-Class Kappa (Classification).
+        # But if the user wants Multi-Class F1, we should compute it on mc_df.
+        if is_multi_class and mc_df is not None and len(mc_df) > 0:
+            # Use weighted F1 for multi-class
+            try:
+                f1 = f1_score(
+                    mc_df[label_cols[0]].astype(str),
+                    mc_df[label_cols[1]].astype(str),
+                    average="weighted",
+                    zero_division=0,
+                )
+            except:
+                pass
 
     # Krippendorff's Alpha
-    # NEW: Prepare dataframe that includes virtual TNs if applicable (Method A/B fix)
-    alpha_df = df.copy()
-    if adjusted_kappa is not None and estimated_tn > 0:
-        # We constructed virtual zeros for Kappa; we must include them for Alpha too
-        # to match the Transparency section math.
-        zeros_data = {c: [0] * int(estimated_tn) for c in coder_cols}
-        zeros_df = pd.DataFrame(zeros_data)
-        alpha_df = pd.concat([alpha_df, zeros_df], ignore_index=True)
-
-    df_long = pd.melt(
-        alpha_df.reset_index(),  # Use alpha_df instead of df
-        id_vars="index",
-        value_vars=coder_cols,
-        var_name="rater",
-        value_name="label",
-    )
+    kripp_alpha = np.nan
     try:
-        kripp_alpha = simpledorff.calculate_krippendorffs_alpha_for_df(
-            df_long, experiment_col="index", annotator_col="rater", class_col="label"
-        )
+        alpha_source_df = mc_df if is_multi_class and mc_df is not None else df
+        target_cols = label_cols if is_multi_class else coder_cols
+
+        # Ensure we have data
+        if len(alpha_source_df) > 0:
+            df_long = pd.melt(
+                alpha_source_df.reset_index(),
+                id_vars="index",
+                value_vars=target_cols,
+                var_name="rater",
+                value_name="label",
+            )
+            kripp_alpha = simpledorff.calculate_krippendorffs_alpha_for_df(
+                df_long,
+                experiment_col="index",
+                annotator_col="rater",
+                class_col="label",
+            )
     except Exception as e:
-        kripp_alpha = np.nan
         print(f"\nCould not calculate Krippendorff's Alpha. Error: {e}\n")
 
-    # Calculate Per-Code (Macro) Metrics
+    # Macro Metrics
     macro_f1, macro_kappa, per_code_df = calculate_per_code_metrics(df, coder_cols)
+    effective_prevalence = (df[coder_cols].mean().mean()) * 100
+
+    agreements_count = 0
+    if is_multi_class and mc_df is not None:
+        # Multi-Class Agreement: Labels must match
+        agreements_count = (mc_df[label_cols[0]] == mc_df[label_cols[1]]).sum()
+        # analyzed_segments is already len(mc_df)
+    else:
+        # Binary Agreement: Columns must match (0-0 or 1-1)
+        agreements_count = (
+            df[coder_cols].eq(df[coder_cols].iloc[:, 0], axis=0).all(axis=1)
+        ).sum()
+
+    disagreements_count = analyzed_segments - agreements_count
+    agreement_percentage = (
+        (agreements_count / analyzed_segments * 100) if analyzed_segments > 0 else 0
+    )
 
     # Generate Report
     report = []
@@ -734,7 +986,6 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
     report.append("\n1. DATASET SUMMARY")
     report.append("-" * 30)
     report.append(f"{'File Name':<25} : {os.path.basename(file_path)}")
-    # Clean coder names for display (remove '_agreement')
     display_coders = [c.replace("_agreement", "") for c in coder_cols]
     report.append(f"{'Coders':<25} : {', '.join(display_coders)}")
     report.append(
@@ -746,12 +997,6 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
     )
     report.append(f"{'Final Analyzed Segments':<25} : {analyzed_segments}")
 
-    # Calculate raw agreements for the report
-    agreements_count = (
-        df[coder_cols].eq(df[coder_cols].iloc[:, 0], axis=0).all(axis=1)
-    ).sum()
-    disagreements_count = analyzed_segments - agreements_count
-
     report.append(f"{'Perfect Agreement':<25} : {agreements_count}")
     report.append(f"{'Disagreements':<25} : {disagreements_count}")
 
@@ -759,10 +1004,14 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
         report.append(
             f"{'Est. True Negatives':<25} : {estimated_tn} (derived from transcripts)"
         )
-    elif has_injected_tns:
+    elif has_injected_tns and method == "METHOD_C":
         # For Method C where we skipped adjusted_kappa but have them in DF
         report.append(
             f"{'Est. True Negatives':<25} : {estimated_tn} (included in dataset)"
+        )
+    elif method != "METHOD_C":
+        report.append(
+            f"{'Est. True Negatives':<25} : {estimated_tn} (Ignored by Method)"
         )
 
     if prevalence_percentage is not None:
@@ -789,7 +1038,7 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
     elif has_missing_negatives:
         k_name = "Cohen's Kappa (Pooled, Raw)"
         k_val = kappa
-        k_note = " [INVALID - Missing Negatives]"
+        k_note = " "
     else:
         k_name = "Cohen's Kappa (Pooled)"
         k_val = kappa
@@ -816,14 +1065,15 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
     report.append("-" * 60)
 
     # Explanation Text
-    explanation_text = get_results_explanation(
-        agreement_percentage,
-        k_val,  # Pass the kappa we decided to show
-        f1,
-        has_missing_negatives and adjusted_kappa is None,
-        prevalence_percentage,
-    )
-    report.append(explanation_text)
+    # explanation_text = get_results_explanation(
+    #     agreement_percentage,
+    #     k_val,
+    #     f1,
+    #     has_missing_negatives and adjusted_kappa is None,
+    #     prevalence_percentage,  # Theoretical/Original prevalence
+    #     effective_prevalence,  # Actual saturation of the analyzed subset
+    # )
+    # report.append(explanation_text)
     # ==============================================================================
     # ================= INTER-RATER RELIABILITY REPORT (END) =======================
     # ==============================================================================
@@ -834,25 +1084,29 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
     report.append("-" * 60)
 
     # Determine which Kappa value to validate in the Math section
-    # We align this with the 'k_val' shown in the Reliability Metrics table above.
     if adjusted_kappa is not None:
-        # If we reported the Adjusted Kappa, we must show the Virtual TNs in the math
         final_k_val = adjusted_kappa
         tn_display_val = estimated_tn
-    elif has_injected_tns:
-        # Method C with injected TNs: Use the known count
+    elif has_injected_tns and method == "METHOD_C":
         final_k_val = kappa
         tn_display_val = estimated_tn
     else:
-        # Raw Kappa: Calculate any existing 0-0 rows in the dataframe
-        # generate_math_section does not automatically count 0-0 rows from the DF
         final_k_val = kappa
         tn_display_val = (df[coder_cols] == 0).all(axis=1).sum()
 
     if len(coder_cols) == 2:
-        # Pass 'kripp_alpha' to the function
+        # Pass the Multi-Class DF and Label Cols if active
+        math_df = mc_df if is_multi_class and mc_df is not None else df
+
         math_section = generate_math_section(
-            df, coder_cols, f1, final_k_val, tn_display_val, kripp_alpha
+            math_df,
+            coder_cols,
+            f1,
+            kappa,
+            0,  # TNs handled inside
+            kripp_alpha,
+            is_multi_class=is_multi_class,
+            label_cols=label_cols if is_multi_class else None,
         )
         report.append(math_section)
     else:
@@ -926,7 +1180,12 @@ def calculate_agreement(file_path, coder_cols, overlap_percentage):
 
 
 def get_results_explanation(
-    agreement_pct, kappa, f1, has_missing_negatives, prevalence_pct=None
+    agreement_pct,
+    kappa,
+    f1,
+    has_missing_negatives,
+    prevalence_pct=None,
+    effective_prevalence_pct=None,
 ):
     """
     Generates a structured research explanation for the results.
@@ -948,8 +1207,9 @@ def get_results_explanation(
         )
         explanation.append("   - IMPLICATION: Cohen's Kappa is mathematically valid.")
 
-    # 2. Paradox Check (High F1, Low Kappa, Low Prevalence)
-    is_paradox = (
+    # 2. Paradox Check
+    # Low Prevalence Paradox (Method C context)
+    is_low_prev_paradox = (
         not has_missing_negatives
         and prevalence_pct is not None
         and prevalence_pct < 15.0
@@ -957,8 +1217,18 @@ def get_results_explanation(
         and f1 > 0.50
     )
 
+    # High Saturation Paradox (Method A context - High Effective Prevalence)
+    # If > 85% of the data is "1", Kappa fails because Expected Agreement becomes ~100%
+    is_high_prev_paradox = (
+        effective_prevalence_pct is not None
+        and effective_prevalence_pct > 85.0
+        and kappa < 0.40
+        and f1 > 0.80
+    )
+
     explanation.append("\n2. STATISTICAL OBSERVATIONS:")
-    if is_paradox:
+
+    if is_low_prev_paradox:
         explanation.append(
             f"   * PARADOX DETECTED: Low Kappa ({kappa:.2f}) vs High F1 ({f1:.2f})."
         )
@@ -968,6 +1238,22 @@ def get_results_explanation(
         )
         explanation.append(
             "     penalized by the high volume of agreement on empty space."
+        )
+    elif is_high_prev_paradox:
+        explanation.append(
+            f"   * PARADOX DETECTED: Low Kappa ({kappa:.2f}) vs High F1 ({f1:.2f})."
+        )
+        explanation.append(
+            f"   * CAUSE: High Data Saturation ({effective_prevalence_pct:.2f}% Positives)."
+        )
+        explanation.append(
+            "     The dataset (after filtering) consists almost entirely of 'Agreements'."
+        )
+        explanation.append(
+            "     Because there is no variance (no 'Negatives' to distinguish skill from chance),"
+        )
+        explanation.append(
+            "     Kappa assumes the high agreement is due to chance probability."
         )
     else:
         diff = (f1 * 100) - agreement_pct
@@ -992,13 +1278,18 @@ def get_results_explanation(
 
     # 3. Final Recommendation
     explanation.append("\n3. RECOMMENDATION FOR REPORTING:")
-    if is_paradox:
+    if is_low_prev_paradox:
         explanation.append("   > PRIMARY METRIC: Report F1-Score (Dice Coefficient).")
         explanation.append(
-            "   > REASONING: Due to the 'Prevalence Paradox', Kappa underestimates reliability."
+            "   > REASONING: Due to the 'Prevalence Paradox' (Rare Codes), Kappa underestimates reliability."
+        )
+    elif is_high_prev_paradox:
+        explanation.append("   > PRIMARY METRIC: Report F1-Score (Dice Coefficient).")
+        explanation.append(
+            "   > REASONING: Due to the 'Prevalence Paradox' (Saturation), Kappa is mathematically invalid."
         )
         explanation.append(
-            f"   > NOTE: You may cite the low prevalence ({prevalence_pct:.1f}%) as context."
+            "     (The formula fails when the dataset lacks negative examples)."
         )
     elif has_missing_negatives:
         explanation.append("   > PRIMARY METRIC: F1-Score.")
@@ -1038,7 +1329,9 @@ def main():
         coder_cols = [
             c
             for c in df_head.columns
-            if c not in metadata_cols and not c.startswith("Unnamed")
+            if c not in metadata_cols
+            and not c.startswith("Unnamed")
+            and not c.endswith("_label")
         ]
 
         if not coder_cols:
