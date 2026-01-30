@@ -93,11 +93,11 @@ CALCULATE_SCORES_ON_MUTUAL_SEGMENTS_ONLY = False  # (Default: False)
 # STRIJBOS CALCULATION TOGGLES
 # ==============================================================================
 # Choose which method to use for the "Agreements.txt" statistical report.
-# METHOD_A : Mutual Agreement (Intersection). Excludes 0-0 and 1-0/0-1 mismatches (Strict).
+# METHOD_A : Mutual Agreement (Intersection). Excludes 0-0 and 1-0/0-1 mismatches.
 # METHOD_B : Union Agreement. Includes 1-0/0-1 disagreements. Excludes 0-0 (Silence).
-# METHOD_C : Full Master List. Includes 0-0 (Silence) as Agreement. (Requires Phase 2 to work).
-STRIJBOS_METHOD = "METHOD_A"
-# STRIJBOS_METHOD = "METHOD_B"
+# METHOD_C : Full Master List. Includes 0-0 (Silence) as Agreement..
+# STRIJBOS_METHOD = "METHOD_A"
+STRIJBOS_METHOD = "METHOD_B"
 # STRIJBOS_METHOD = "METHOD_C"
 # ==============================================================================
 # AGREEMENT CALCULATION MODE
@@ -116,7 +116,7 @@ STRIJBOS_METHOD = "METHOD_A"
 AGREEMENT_CALCULATION_MODE = 1  # (Default: 1)
 
 # ==============================================================================
-# Reference: Methodological issues in developing a multi-dimensional coding procedure for small-group chat communication
+# Reference To STRIJBOS: Methodological issues in developing a multi-dimensional coding procedure for small-group chat communication
 # ==============================================================================
 # Citation:
 # Title: "Methodological issues in developing a multi-dimensional coding procedure for small-group chat communication"
