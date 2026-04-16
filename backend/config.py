@@ -89,6 +89,11 @@ CALCULATE_SCORES_ON_MUTUAL_SEGMENTS_ONLY = False  # (Default: False)
 # 'CALCULATE_SCORES_ON_MUTUAL_SEGMENTS_ONLY' set to FALSE so that 1-0 disagreements are not filtered out.
 # If set to True, it might override Strijbos settings by removing "Omissions".
 # If STRIJBOS_METHOD is 'METHOD_A' or 'METHOD_B', this setting has no effect.
+
+# 3. ANONYMIZATION
+# If True, replaces actual researcher names with 'coder-1', 'coder-2', etc.
+MASK_CODER_NAMES = True  # (Default: False)
+
 # ==============================================================================
 # STRIJBOS CALCULATION TOGGLES
 # ==============================================================================
@@ -96,8 +101,8 @@ CALCULATE_SCORES_ON_MUTUAL_SEGMENTS_ONLY = False  # (Default: False)
 # METHOD_A : Mutual Agreement (Intersection). Excludes 0-0 and 1-0/0-1 mismatches.
 # METHOD_B : Union Agreement. Includes 1-0/0-1 disagreements. Excludes 0-0 (Silence).
 # METHOD_C : Full Master List. Includes 0-0 (Silence) as Agreement..
-# STRIJBOS_METHOD = "METHOD_A"
-STRIJBOS_METHOD = "METHOD_B"
+STRIJBOS_METHOD = "METHOD_A"
+# STRIJBOS_METHOD = "METHOD_B"
 # STRIJBOS_METHOD = "METHOD_C"
 # ==============================================================================
 # AGREEMENT CALCULATION MODE

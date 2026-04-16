@@ -9,3 +9,4 @@ sentence-transformers
 simpledorff
 networkx
 openpyxl
+openai

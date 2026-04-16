@@ -37,6 +37,8 @@ backend/output/*
 !backend/output/.gitkeep
 backend/transcripts/*
 !backend/transcripts/.gitkeep
+backend/fix_csv.py
+backend/merge_code_text.py
 backend/secret.py
 backend/.env
 backend/notes/

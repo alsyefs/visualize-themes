@@ -1,0 +1,23 @@
+.
+├── .gitignore
+├── .python-version
+├── README.md
+├── app.py
+├── app.spec
+├── backend
+│   ├── calculate_irr.py
+│   ├── codebook_definitions
+│   ├── compare_agreement_columns.py
+│   ├── config.py
+│   ├── create_html_report.py
+│   ├── create_latex_appendix_of_codebook.py
+│   ├── diagrams
+│   ├── input
+│   ├── irr_input
+│   ├── mark_agreements.py
+│   ├── merge_codebooks.py
+│   ├── output
+│   ├── report_template.py
+│   └── transcripts
+├── requirements.txt
+└── tree_descriptions.json

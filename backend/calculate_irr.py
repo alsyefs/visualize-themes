@@ -236,6 +236,11 @@ def load_and_prepare_data(
         log_note(f"Error: Column '{file_col}' not found.", notes_filepath)
         return None, [], [], {}
 
+    if getattr(config, "MASK_CODER_NAMES", False):
+        all_raw_coders = sorted(list(all_ratings_df[coder_col].dropna().unique()))
+        coder_map = {name: f"coder-{i+1}" for i, name in enumerate(all_raw_coders)}
+        all_ratings_df[coder_col] = all_ratings_df[coder_col].map(coder_map)
+
     raw_stats = {
         "total_raw_events": len(all_ratings_df),
         "by_coder": all_ratings_df[coder_col].value_counts().to_dict(),
