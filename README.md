@@ -84,3 +84,10 @@ You can modify `config.py` to change how the algorithm handles text:
 - `ALIGN_SEGMENTS_ACROSS_CODES`:
     - `False` (Default): 'Code A' and 'Code B' are treated as separate rows, even if they cover the same text.
     - `True`: Forces different codes on the same text to be aligned into a single row (creating a direct conflict).
+
+
+---
+
+## ⚖️ Licensing Information
+
+This software is distributed under the **GNU General Public License v3.0 (GPLv3)**. (file [`LICENSE`](LICENSE)).
