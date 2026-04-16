@@ -19,5 +19,4 @@
 │   ├── output
 │   ├── report_template.py
 │   └── transcripts
-├── requirements.txt
-└── tree_descriptions.json
+└── requirements.txt
