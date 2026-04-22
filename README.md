@@ -1,3 +1,8 @@
+## Quick Interactive view
+To view the coded segments, please download then open this file in a browser: [`coded_segments.html`](coded_segments.html).
+
+---
+
 # 📊 Inter-Rater Reliability (IRR) & Codebook Visualizer
 
 This tool automates the process of merging qualitative coding datasets, calculating Inter-Rater Reliability statistics (Cohen's Kappa, F1-Score/Dice, Krippendorff's Alpha), and generating an interactive HTML dashboard for visualization.
